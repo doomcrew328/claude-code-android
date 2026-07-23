@@ -66,13 +66,14 @@ pkg install termux-api      # and install the Termux:API app from F-Droid
 
 Then just run `imedic`.
 
-**On a Linux/Mac computer (for the actual restoring/flashing):**
+**On your PC (for the actual restoring/flashing):** see the full
+step-by-step **[PC workbench setup guide](docs/pc-setup.md)** — Windows
+(iTunes + 3uTools), Linux (libimobiledevice + checkm8), and macOS.
 
 ```bash
 cd apple-toolkit && bash install.sh
-# then the real engine:
-sudo apt install libimobiledevice-utils   # Debian/Ubuntu
-# (idevicerestore may need building from source on some distros)
+# then the real engine, e.g. on Debian/Ubuntu:
+sudo apt install libimobiledevice-utils   # (idevicerestore may need building)
 ```
 
 Only dependency for the core is **Python 3**. Detection and restoring use extra
