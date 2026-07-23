@@ -68,7 +68,8 @@ Then just run `imedic`.
 
 **On your PC (for the actual restoring/flashing):** see the full
 step-by-step **[PC workbench setup guide](docs/pc-setup.md)** — Windows
-(iTunes + 3uTools), Linux (libimobiledevice + checkm8), and macOS.
+(free iTunes first, optional 3uTools), Linux (libimobiledevice + checkm8),
+and macOS. All free tools.
 
 ```bash
 cd apple-toolkit && bash install.sh

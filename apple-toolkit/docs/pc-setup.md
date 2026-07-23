@@ -12,27 +12,46 @@ restore/flash step. This guide gets that half working. Pick your OS.
 
 ## Windows (probably what you're on)
 
-Windows doesn't run libimobiledevice cleanly, so use the tools that Just Work:
+Everything you need here is **free**. Use Apple's own tool first — it's the
+zero-cost, no-third-party path — and only add 3uTools if you want the extra
+niceties.
 
-1. **Install Apple's driver.** Get **iTunes from apple.com** (the direct
-   download, *not* the Microsoft Store version — the Store one hides the device
-   driver you need). Installing it gives Windows the USB driver that lets it see
-   an iPhone in Recovery/DFU.
-2. **Install 3uTools** (`3u.com`) — a free all-in-one that reads the phone,
-   shows battery health, and does restores with a friendly progress bar. This is
-   the closest thing to a "SamFW experience" on the Apple side.
-3. **Reviving a bricked phone:**
+### The free primary path: iTunes (Apple's own)
+
+1. **Install iTunes from apple.com** — the **direct download**, *not* the
+   Microsoft Store version. The Store build hides the USB device driver you
+   need; the apple.com installer includes it. This is what lets Windows see an
+   iPhone in Recovery/DFU at all, so you want it either way.
+2. **Reviving a bricked phone:**
    - On your S21, run `imedic dfu <model>` for the button steps and
-     `imedic firmware <model>` to see what iOS is currently signed.
-   - Put the phone in Recovery or DFU, plug into the PC.
-   - In 3uTools → **Flash & JB** → pick the signed firmware → **Flash**
-     (tick "retain data" only if you're trying to save data; for a practice
-     phone, a clean erase-flash is the reliable choice).
-   - Or in iTunes/Finder: hold **Shift** and click **Restore** to point it at an
-     `.ipsw` you downloaded from ipsw.me.
+     `imedic firmware <model>` to see what iOS is signed + grab the `.ipsw`
+     from ipsw.me.
+   - Put the phone in Recovery or DFU and plug it into the PC.
+   - In iTunes, hold **Shift** and click **Restore** to point it at the `.ipsw`
+     you downloaded. (Plain "Restore" without Shift auto-downloads the latest
+     signed build for you — also fine.)
+
+That's the whole job for the vast majority of software boot loops. Free, no
+third party, nothing to untick.
+
+### Optional nicer UI: 3uTools
+
+**3uTools** (`3u.com`) is also free — a friendlier all-in-one that shows battery
+health, reads the phone's details, and gives you a restore progress bar. It's
+the closest thing to a "SamFW experience" on the Apple side. Caveats worth
+knowing:
+
+- It's **closed-source and ad-supported** (bundled recommendations; watch the
+  installer and untick extras). Fine for practice phones; **don't sign into your
+  real Apple ID through it.**
+- To flash: **Flash & JB** → pick the signed firmware → **Flash** (leave "retain
+  data" off for a clean, reliable erase-flash on a practice phone).
+
+Treat it as a convenience layer *on top of* iTunes' driver, not a replacement.
 
 Windows can't run the deep `checkm8` rescue well — for that you want Linux/Mac
-(below). For 90% of software boot loops, 3uTools on Windows is all you need.
+(below). But for 90% of software boot loops, free iTunes on Windows is all you
+need.
 
 ---
 
