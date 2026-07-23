@@ -1,0 +1,23 @@
+{
+  "_comment": "Plain-English teaching glossary. 'iMedic teach <term>' prints these. Includes the common restore error codes so a beginner can decode iTunes/idevicerestore failures.",
+  "terms": {
+    "dfu": "Device Firmware Update mode. The lowest-level state you can put an iPhone in without special hardware. The screen is intentionally BLACK. A phone in DFU is alive and waiting for a computer to send it firmware. It's how you revive a soft-bricked or boot-looping phone.",
+    "recovery": "One step above DFU. Shows the 'connect to computer' cable graphic. You can restore from here too, but DFU is deeper and better for stubborn cases.",
+    "restore": "Wiping the phone and writing a fresh, Apple-signed iOS onto it. The iPhone equivalent of flashing a Samsung with Odin — EXCEPT Apple must sign it live and only signs the current iOS. Erases all data.",
+    "ipsw": "The iPhone firmware file (like a Samsung .tar/.md5). Model-specific. You feed it to idevicerestore or iTunes/Finder during a restore. Get them from ipsw.me or Apple.",
+    "signing": "Apple's server (TSS) must cryptographically approve every restore in real time. It only approves the iOS version(s) currently being 'signed'. This is why you can't freely downgrade an iPhone the way SamFW lets you flash any old Samsung firmware. Check status at ipsw.me.",
+    "checkm8": "An unpatchable BootROM (hardware-level) exploit that works ONLY on A5-A11 chips = iPhone 4S through iPhone X (and 8/8+). It gives the deepest possible access to a device regardless of its state or passcode. Tools: checkra1n, ipwndfu. A12 (iPhone XS) and newer are immune.",
+    "activation lock": "Apple's anti-theft. If Find My was on, the phone stays tied to the owner's Apple ID even after an erase. There is NO legitimate bypass. An activation-locked free phone is a parts/practice unit only.",
+    "libimobiledevice": "The open-source 'ADB for iPhone': ideviceinfo, idevicediagnostics, idevicebackup2, idevicerestore, ideviceinstaller, idevicecrashreport. Talks to the phone over usbmuxd. Native on Linux, works on Mac/Windows too.",
+    "usbmuxd": "The daemon that multiplexes the USB connection to an iPhone so multiple tools can talk to it. libimobiledevice needs it running.",
+    "dcsd": "Apple's diagnostic serial cable. Gives you a serial console to watch a phone's boot messages — priceless for diagnosing a phone that won't even reach DFU. The open-source DIY version is the 'Tamarin' cable.",
+    "tristar": "Nickname for the U2 / charging IC (Tristar on older, Tigris on newer) that manages USB and charging negotiation. A common failure behind 'won't charge / not recognized'. Replacing it is microsoldering.",
+    "pmic": "Power Management IC — distributes and regulates power across the board. If it's dead, nothing powers on and nothing enumerates on USB.",
+    "nand": "The flash storage chip. Failing NAND causes boot loops and restore errors like 4013/9 that fail at a consistent point.",
+    "4013": "Restore error 4013 (and 4014, 9): the restore lost connection to the device mid-transfer. Causes, in order to check: bad/long USB cable, USB hub (plug direct), then — if it fails at the same % every time — NAND or board hardware.",
+    "14":   "Restore error 14: usually a USB/data interruption. Try a different Apple-quality cable, a different USB port (rear ports on a desktop), disable security software, retry.",
+    "9":    "Restore error 9: connection dropped during the data phase, often kernel/USB. Same playbook as 4013 — cable/port first, then suspect NAND/board if it's consistent.",
+    "3004": "Error 3004/17xxx: the computer couldn't reach Apple's signing server. Check internet/hosts file, then retry.",
+    "otg":  "USB On-The-Go. Lets your Android phone act as the USB HOST so you can plug the iPhone into IT. You need a USB-C OTG adapter/cable. iMedic uses this to detect the iPhone's mode from your S25 Ultra."
+  }
+}

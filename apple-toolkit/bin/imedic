@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# iMedic launcher — finds the package next to this script and runs it.
+set -euo pipefail
+SELF="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
+exec env PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" python3 -m imedic "$@"

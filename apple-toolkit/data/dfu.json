@@ -1,0 +1,42 @@
+{
+  "_comment": "DFU and Recovery entry sequences, grouped by hardware family. DFU is timing-sensitive: if the Apple logo appears you held too long (that's just Recovery/normal boot) and you retry. A correct DFU entry = totally BLACK screen. iMedic reads the family from models.json and shows the matching steps.",
+  "recovery": {
+    "home":   ["Plug the phone into the computer with a cable.", "Hold the HOME button (and only Home).", "Keep holding until you see the Recovery cable graphic (connect-to-iTunes screen).", "Release. You are in Recovery."],
+    "home7":  ["Plug the phone into the computer.", "Hold VOLUME DOWN.", "Keep holding until the Recovery cable graphic appears.", "Release. You are in Recovery."],
+    "faceid": ["Plug the phone into the computer.", "Press and release VOLUME UP quickly.", "Press and release VOLUME DOWN quickly.", "Press and HOLD the SIDE button until the Recovery cable graphic appears (ignore the power-off slider and the Apple logo along the way).", "Release. You are in Recovery."]
+  },
+  "dfu": {
+    "home": {
+      "note": "iPhone 6s and older + SE (1st gen). Goal: BLACK screen, no logo.",
+      "steps": [
+        "Plug the phone into the computer.",
+        "Hold POWER + HOME together for 8 seconds.",
+        "At 8 seconds, RELEASE POWER but keep holding HOME.",
+        "Keep holding HOME for ~5 more seconds.",
+        "Screen stays BLACK = you're in DFU. If you see the Apple logo, you held too long — start over."
+      ]
+    },
+    "home7": {
+      "note": "iPhone 7 / 7 Plus. Uses Volume Down instead of the (non-clicking) Home pad.",
+      "steps": [
+        "Plug the phone into the computer.",
+        "Hold POWER + VOLUME DOWN together for 8 seconds.",
+        "At 8 seconds, RELEASE POWER but keep holding VOLUME DOWN.",
+        "Keep holding VOLUME DOWN for ~5 more seconds.",
+        "Screen stays BLACK = DFU. Apple logo = too long, retry."
+      ]
+    },
+    "faceid": {
+      "note": "iPhone 8 / X and everything newer (Face ID, plus 8/8+, SE 2/3).",
+      "steps": [
+        "Plug the phone into the computer.",
+        "Press and release VOLUME UP quickly.",
+        "Press and release VOLUME DOWN quickly.",
+        "Press and HOLD the SIDE button for ~10 seconds until the screen goes fully BLACK (do NOT stop at the power slider or Apple logo).",
+        "Without releasing Side, now ALSO hold VOLUME DOWN.",
+        "Hold both for ~5 seconds, then RELEASE the SIDE button but keep holding VOLUME DOWN for ~10 seconds.",
+        "Screen stays BLACK = DFU. Apple logo = too long, retry."
+      ]
+    }
+  }
+}

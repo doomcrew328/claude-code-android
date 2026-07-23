@@ -1,0 +1,14 @@
+{
+  "_comment": "Apple USB vendor ID is 0x05ac. The product ID tells you what MODE a connected iPhone is in, even when the screen is black and the phone looks 'dead'. This is the single most useful thing iMedic can read from an Android phone over OTG without root. PIDs are best-effort and widely documented by the checkra1n / ipwndfu / libimobiledevice communities.",
+  "vendor_id": "05ac",
+  "vendor_name": "Apple, Inc.",
+  "modes": {
+    "1227": { "mode": "DFU",      "label": "DFU mode (Device Firmware Update)", "meaning": "The lowest-level mode a normal user can reach. Screen is BLACK on purpose. The phone is alive and waiting for a computer to restore it. This is GOOD NEWS on a 'dead' phone.", "good": true },
+    "1281": { "mode": "RECOVERY", "label": "Recovery mode (iBoot)",             "meaning": "One layer above DFU. Usually shows the 'connect to computer / iTunes' cable graphic. The phone can be restored from here too.", "good": true },
+    "1222": { "mode": "DFU_WTF",  "label": "DFU restore / WTF mode",            "meaning": "A DFU sub-state seen mid-restore or after a checkm8 exploit. The phone is accepting low-level images.", "good": true },
+    "1338": { "mode": "KIS",      "label": "KIS / diagnostics",                 "meaning": "Kong-in-System / diagnostics transport. Rare; seen with Apple internal or diagnostic flows.", "good": true },
+    "4141": { "mode": "PONGO",    "label": "pongoOS (checkm8 exploited)",        "meaning": "The phone has been exploited with checkm8 and is running pongoOS. You have the deepest access that exists. Only possible on A5-A11 devices.", "good": true },
+    "12a8": { "mode": "NORMAL",   "label": "Normal / booted iOS",               "meaning": "The phone is booted into iOS (or the setup screen). If it's locked/activation-locked you'll be limited, but the hardware clearly works.", "good": true },
+    "12ab": { "mode": "NORMAL",   "label": "Normal / booted iOS (iPad/variant)","meaning": "Booted normally.", "good": true }
+  }
+}

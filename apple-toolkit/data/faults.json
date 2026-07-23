@@ -1,0 +1,98 @@
+{
+  "_comment": "Guided diagnostic decision trees. Each flow is a list of steps. A step asks a yes/no/observation question, teaches WHY you're checking it, and points to the next step or a conclusion. The diagnose engine walks these interactively. Written for a beginner working on free/broken marketplace iPhones.",
+  "flows": {
+    "no-power": {
+      "title": "Phone is completely dead (no power, no light, nothing)",
+      "start": "s1",
+      "steps": {
+        "s1": {
+          "ask": "Plug it into a known-good charger and a USB power meter (a $10 USB ammeter). Does the meter show ANY current draw (even a tiny 0.01-0.05A blip)?",
+          "teach": "A USB ammeter is your stethoscope. Current draw tells you the phone is at least trying to charge. Zero draw means the power path is broken before the battery; a small steady draw can mean a short.",
+          "yes": "s2", "no": "s3"
+        },
+        "s2": {
+          "ask": "Does it draw a NORMAL charging amount (climbs toward ~0.5-1.0A) rather than a fixed dead-flat number?",
+          "teach": "Healthy charging current rises then tapers. A stuck, unchanging draw (e.g. exactly 0.5A forever, or a high 1A+ with heat) often means a shorted rail pulling power straight to ground.",
+          "yes": "c-deadbattery", "no": "c-short"
+        },
+        "s3": {
+          "ask": "Try to force it into DFU/Recovery (use iMedic's DFU coach) and watch your computer / iMedic detect. Does it EVER show up as a USB device?",
+          "teach": "Even a phone with a totally dead battery and black screen will often enumerate on USB in DFU. If the CPU and power management chip (PMIC) are alive, the USB stack answers. This separates 'dead battery' from 'dead board'.",
+          "yes": "c-dfu-alive", "no": "c-noboot"
+        }
+      }
+    },
+    "no-charge": {
+      "title": "Powers on but won't charge / not recognized when plugged in",
+      "start": "s1",
+      "steps": {
+        "s1": {
+          "ask": "Try a different KNOWN-GOOD cable and charger first. Still not charging?",
+          "teach": "Rule out the cheap stuff before you open anything. Bad cables are the #1 fake fault. Never trust the cable that came with the broken phone.",
+          "yes": "s2", "no": "c-cable"
+        },
+        "s2": {
+          "ask": "Look into the charge port with a light. Is there lint, corrosion, or a bent pin packed in there?",
+          "teach": "Charge ports are lint magnets. A packed port stops the cable seating fully. Dry-brush it out (no metal tools while powered).",
+          "yes": "c-portclean", "no": "s3"
+        },
+        "s3": {
+          "ask": "Does it charge for a moment then stop, or run hot near the port when plugged in?",
+          "teach": "On iPhones the charge port + Tristar/Tigris charging ICs manage USB negotiation. Intermittent charging or heat points at a failing port flex or a charging IC — the latter is board-level (microsoldering).",
+          "yes": "c-chargeic", "no": "c-portswap"
+        }
+      }
+    },
+    "boot-loop": {
+      "title": "Stuck on Apple logo / boot loops / restarts",
+      "start": "s1",
+      "steps": {
+        "s1": {
+          "ask": "Does it reach the Apple logo at all (vs. staying black)?",
+          "teach": "Reaching the logo means the bootrom, PMIC and CPU are alive and it's loading iOS. That's a very different (and more hopeful) problem than a black no-boot.",
+          "yes": "s2", "no": "no-power"
+        },
+        "s2": {
+          "ask": "Put it in Recovery/DFU and do a RESTORE (see the Firmware section — this wipes it clean to the newest signed iOS). Does it complete and boot?",
+          "teach": "A clean restore fixes the huge category of software boot loops (bad update, corrupt filesystem). It erases user data, but on a marketplace practice phone that's fine and expected.",
+          "yes": "c-fixed", "no": "s3"
+        },
+        "s3": {
+          "ask": "During the restore, did it fail with a specific error number (e.g. 4013, 4014, 9, 14, 40xx)?",
+          "teach": "Restore error numbers are gold. 4013/4014/9 usually = a physical connection or NAND/board fault mid-transfer; 14 = data/cable; 40xx = various. iMedic's teach command explains the common ones.",
+          "yes": "c-errorcode", "no": "c-noboot"
+        }
+      }
+    },
+    "disabled": {
+      "title": "'iPhone is disabled' / forgot passcode / activation lock",
+      "start": "s1",
+      "steps": {
+        "s1": {
+          "ask": "Is the message 'iPhone is Disabled' / 'Security Lockout' (passcode) OR is it asking for an Apple ID after erase (Activation Lock)?",
+          "teach": "These are TWO different walls. 'Disabled' = too many wrong passcodes; fixable by erasing (you lose the data). Activation Lock = the phone is tied to someone's Apple ID and cannot be legitimately unlocked without that account.",
+          "yes": "s2", "no": "s2"
+        },
+        "s2": {
+          "ask": "If it's Activation Lock and you don't have the original owner's Apple ID / password / receipt — do you have proof it's legitimately yours?",
+          "teach": "Honest boundary: Activation Lock is Apple's anti-theft system and there is no legitimate software bypass. A free 'broken' marketplace phone that's activation-locked is only good for parts practice, not for putting back into service. Erasing removes the passcode wall but NOT Activation Lock.",
+          "yes": "c-erase", "no": "c-activationlock"
+        }
+      }
+    }
+  },
+  "conclusions": {
+    "c-deadbattery":   { "title": "Likely just a dead/degraded battery", "body": "The board is alive and charging normally. Let it charge 30+ min, then power on. If it boots but dies fast or shows bad battery health, a battery swap is a great FIRST real repair — no soldering, cheap, high success rate." },
+    "c-short":         { "title": "Suspected short circuit on a power rail", "body": "Fixed/high current with heat = something is pulling power to ground. This is board-level: you'd use a DC power supply and freeze-spray/thermal camera to find the hot component. Beyond a beginner swap — good to LEARN on but don't expect a quick fix." },
+    "c-dfu-alive":     { "title": "Board is alive — software or battery, not dead", "body": "It enumerates on USB, so the CPU/PMIC work. Do a clean DFU restore (Firmware section). If restore succeeds it was software; if it fails mid-way with 4013/9 it's leaning toward a NAND/board issue." },
+    "c-noboot":        { "title": "No USB enumeration — deep board fault or no power path", "body": "Nothing answers on USB even in DFU. Suspect the power path (battery connector, PMIC), a bad U2/charging IC starving it, or CPU. This is where a DCSD/Tamarin serial cable and microsoldering come in. Great learning victim; low odds for a first fix." },
+    "c-cable":         { "title": "It was the cable/charger", "body": "Classic. Costs nothing. Move on." },
+    "c-portclean":     { "title": "Clogged charge port", "body": "Clean it out (plastic/wood pick, isopropyl, dry brush). Re-test. Fixes a surprising number of 'won't charge' phones for free." },
+    "c-portswap":      { "title": "Charge port flex likely bad", "body": "On many iPhones the charge port is a replaceable flex cable — a solid intermediate no-microsolder-ish repair (some models need shield/soldering, many are connector-only). Order the right flex for the exact model." },
+    "c-chargeic":      { "title": "Charging IC (Tristar/Tigris) suspected", "body": "Heat + intermittent charge points at the charging IC. That's microsoldering (hot air, microscope). Bookmark it as a skill goal, not a day-one fix." },
+    "c-fixed":         { "title": "Fixed by clean restore", "body": "It was software. Congrats — that's a real repair. Set it up, verify Wi-Fi/cell/camera/sound all work." },
+    "c-errorcode":     { "title": "Restore failed with an error code", "body": "Run: iMedic teach <code> (e.g. 'teach 4013'). Note whether it fails at the same % every time (points to hardware) or randomly (often cable/USB)." },
+    "c-erase":         { "title": "Erase to clear the passcode", "body": "A DFU/Recovery restore wipes the 'Disabled' passcode along with the data. If it is NOT activation-locked, it'll come back as a fresh setup phone." },
+    "c-activationlock":{ "title": "Activation Locked — parts/practice only", "body": "No legitimate bypass exists. Use it to practice disassembly, screen/battery/port swaps, and DFU drills. Harvest good parts. Do not buy tools claiming to 'unlock' iCloud — they're scams or illegal." }
+  }
+}
