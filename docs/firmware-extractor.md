@@ -138,7 +138,20 @@ If the tool is missing the image is left as is and a warning names what to insta
 ## Tests
 
 ```bash
-python3 tests/fwextract-tests.py -v
+python3 tests/fwextract-tests.py -v      # any machine, standard library only
+bash tests/fwextract-crosscheck.sh       # Linux PC/CI, needs the AOSP tools listed in the script
 ```
 
-The suite builds small synthetic firmware in each supported format and checks the extracted output byte for byte. It needs only the standard library; the lz4, zstd and brotli cases run when the matching Python modules are installed (`pip install lz4 zstandard brotli`) and are skipped otherwise. CI runs it both ways (`.github/workflows/fwextract.yml`).
+`fwextract-tests.py` builds small firmware files in each supported format, including damaged and truncated ones, and checks the output byte for byte. It needs only the standard library; the lz4, zstd and brotli cases run when the matching Python modules are installed (`pip install lz4 zstandard brotli`) and are skipped otherwise.
+
+`fwextract-crosscheck.sh` builds its inputs with Google's own tools instead: `mkbootimg` for boot and vendor_boot images (header v0 to v4, five ramdisk compressions), `img2simg` for sparse images, `mkfs.erofs` / `mkfs.ext4` for filesystems, and the `lz4` CLI for Samsung-style packages. It then compares the output with `unpack_bootimg`, `simg2img` and the original inputs. CI runs both (`.github/workflows/fwextract.yml`).
+
+What has been checked beyond those two suites:
+
+- `payload.bin` built with AOSP's compiled `update_metadata.proto` (2 MiB operations, REPLACE / REPLACE_BZ / REPLACE_XZ / ZERO, signatures and metadata signature present, inside a stored OTA zip) extracts identically to the source images and to the independent `payload_dumper` tool.
+- `super.img` written by AOSP's own `liblp` (`MetadataBuilder` + `WriteToImageFile`), raw and sparse, with empty slot-B partitions, splits into images identical to the inputs.
+- Block OTAs (`transfer.list` + `new.dat.br`) convert identically to the reference `sdat2img.py`.
+- A 2 GiB partition extracted from an OTA zip in about 25 s with a peak memory use of about 31 MiB, so a phone with little free RAM is fine.
+- Python 3.8, 3.11, 3.13 and 3.14 (3.14 uses its built-in zstd).
+
+Not yet checked: a run on an actual phone in Termux, and real vendor firmware downloads (the test environment had no access to Google's or Samsung's download servers).

@@ -41,6 +41,7 @@ Exit codes: 0 success, 1 fatal error, 2 finished with some items failed.
 
 import argparse
 import bz2
+import contextlib
 import hashlib
 import io
 import lzma
@@ -126,6 +127,19 @@ def copy_range(src, src_off, dst, dst_off, length, progress=None):
         left -= len(chunk)
         if progress:
             progress.add(len(chunk))
+
+
+@contextlib.contextmanager
+def removed_on_error(path):
+    """Delete a half-written output if anything (even Ctrl-C) interrupts it."""
+    try:
+        yield
+    except BaseException:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        raise
 
 
 def have(tool):
@@ -359,6 +373,11 @@ def lz4_stream(fin, fout, limit=None, progress=None):
 
 def decompress_file(kind, src, dst, label):
     """Decompress a whole file (possibly many GB) with bounded memory."""
+    with removed_on_error(dst):
+        _decompress_file(kind, src, dst, label)
+
+
+def _decompress_file(kind, src, dst, label):
     total = os.path.getsize(src)
     prog = Progress(label, total)
     cli = {"lz4": ["lz4", "-dcq"], "zstd": ["zstd", "-dcq"],
@@ -370,6 +389,7 @@ def decompress_file(kind, src, dst, label):
         if r.returncode != 0:
             raise FwError("%s failed: %s" % (kind, r.stderr.decode(errors="replace").strip()))
         prog.add(total)
+        prog.total = os.path.getsize(dst)
         prog.finish("decompressed (%s)" % kind)
         return
     with open(src, "rb") as fi, open(dst, "wb") as fo:
@@ -417,6 +437,7 @@ def decompress_file(kind, src, dst, label):
                 fo.write(d.decompress(chunk))
                 prog.add(len(chunk))
             fo.write(d.flush())
+    prog.total = os.path.getsize(dst)
     prog.finish("decompressed (%s)" % kind)
 
 
@@ -512,6 +533,10 @@ class Payload:
             if version >= 2:
                 sigsize = struct.unpack(">I", f.read(4))[0]
                 hlen = 24
+            avail = os.path.getsize(path) - base - hlen
+            if msize > avail or sigsize > avail or msize > (512 << 20):
+                raise FwError("payload header is corrupt or the file is incomplete "
+                              "(manifest says %d bytes)" % msize)
             manifest = f.read(msize)
         self.data_offset = base + hlen + msize + sigsize
         m = pb_fields(manifest)
@@ -557,7 +582,7 @@ class Payload:
         bs = self.block_size
         tmp = out_path + ".part"
         prog = Progress(part["name"] + ".img", part["size"])
-        with open(self.path, "rb") as f, open(tmp, "wb") as out:
+        with removed_on_error(tmp), open(self.path, "rb") as f, open(tmp, "wb") as out:
             out.truncate(part["size"])
             for op in part["ops"]:
                 t = op["type"]
@@ -575,7 +600,7 @@ class Payload:
                 while left > 0:
                     chunk = f.read(min(BUF, left))
                     if not chunk:
-                        raise FwError("payload is truncated (incomplete download?)")
+                        raise FwError("%s: payload is truncated (did the download finish?)" % part["name"])
                     left -= len(chunk)
                     if h:
                         h.update(chunk)
@@ -647,7 +672,7 @@ def unsparse(inputs, out_path, label):
     prog = Progress(label, total)
     size = 0
     tmp = out_path + ".part"
-    with open(tmp, "wb") as out:
+    with removed_on_error(tmp), open(tmp, "wb") as out:
         for p in inputs:
             with open(p, "rb") as f:
                 h = f.read(28)
@@ -736,7 +761,7 @@ def read_super(path):
 def extract_super_partition(path, part, out_path):
     prog = Progress(part["name"] + ".img", part["size"])
     tmp = out_path + ".part"
-    with open(path, "rb") as f, open(tmp, "wb") as out:
+    with removed_on_error(tmp), open(path, "rb") as f, open(tmp, "wb") as out:
         out.truncate(part["size"])
         pos = 0
         for sectors, ttype, tdata, tsrc in part["extents"]:
@@ -942,7 +967,7 @@ def sdat2img(transfer_list, new_dat, out_path, label):
     bs = 4096
     prog = Progress(label, total_blocks * bs)
     tmp = out_path + ".part"
-    with open(new_dat, "rb") as src, open(tmp, "wb") as out:
+    with removed_on_error(tmp), open(new_dat, "rb") as src, open(tmp, "wb") as out:
         out.truncate(total_blocks * bs)
         for line in cmds:
             parts = line.split()
@@ -1069,11 +1094,33 @@ class Extractor:
         return b in self.want or re.sub(r"_[ab]$", "", b) in self.want
 
     def run(self, path):
+        if not os.path.isdir(path):
+            kind = detect(path)
+            if kind in ("other", "sdat-data"):
+                raise FwError("%s is not a firmware format this tool recognises "
+                              "(try --list to see what it detects)" % os.path.basename(path))
+            if kind == "boot" and not self.o.unpack_boot:
+                log("%s is a boot image; add --unpack-boot to split it" % os.path.basename(path))
+                return
+            if kind in ("ext4", "erofs") and not self.o.unpack_fs:
+                log("%s is an %s filesystem image; add --unpack-fs to copy its files out"
+                    % (os.path.basename(path), kind))
+                return
         os.makedirs(self.o.outdir, exist_ok=True)
         if os.path.isdir(path):
             self.handle_dir(path, self.o.outdir, produced=False)
         else:
             self.handle(path, self.o.outdir, produced=False)
+        if self.want:
+            found = set()
+            for _root, _dirs, names in os.walk(self.o.outdir):
+                for n in names:
+                    b = base_name(n)
+                    found.update((b, re.sub(r"_[ab]$", "", b)))
+            missing = sorted(self.want - found)
+            if missing:
+                self.failures += 1
+                warn("not found: %s (use --list to see what is inside)" % ", ".join(missing))
 
     def _dest(self, src, outdir, produced, new_name):
         d = os.path.dirname(src) if produced else outdir
@@ -1099,7 +1146,14 @@ class Extractor:
         except FwError as e:
             self.failures += 1
             warn("%s: %s" % (os.path.basename(path), e))
-        except (OSError, EOFError, zipfile.BadZipFile, tarfile.TarError,
+        except zipfile.BadZipFile as e:
+            self.failures += 1
+            warn("%s: the zip is damaged or incomplete (did the download finish?): %s"
+                 % (os.path.basename(path), e))
+        except MemoryError:
+            self.failures += 1
+            warn("%s: ran out of memory; the file is probably corrupt" % os.path.basename(path))
+        except (OSError, EOFError, tarfile.TarError,
                 lzma.LZMAError, zlib.error, struct.error, IndexError, ValueError) as e:
             self.failures += 1
             warn("%s: %s: %s" % (os.path.basename(path), type(e).__name__, e))
@@ -1204,11 +1258,15 @@ class Extractor:
 
     def do_sparse(self, path, outdir, produced, depth):
         name = os.path.basename(path)
+        # system.simg / system_sparse.img / system.img.sparse -> system.img
+        name = re.sub(r"(\.simg|[._]sparse\.img|\.img\.sparse)$", ".img", name, flags=re.I)
         if produced:
-            tmp = path + ".raw"
+            dst = os.path.join(os.path.dirname(path), name)
+            tmp = dst + ".raw"
             unsparse([path], tmp, name)
-            os.replace(tmp, path)
-            dst = path
+            os.replace(tmp, dst)
+            if dst != path:
+                os.remove(path)
         else:
             dst = self._dest(path, outdir, produced, name)
             unsparse([path], dst, name)
@@ -1221,7 +1279,7 @@ class Extractor:
         parts = [p for p in sup["partitions"]
                  if p["size"] and self.wanted(p["name"], container_ok=False)]
         check_space(dest, sum(p["size"] for p in parts))
-        outs = []
+        outs, failed = [], False
         for p in parts:
             out = os.path.join(dest, p["name"] + ".img")
             if os.path.exists(out) and os.path.samefile(out, path):
@@ -1231,8 +1289,9 @@ class Extractor:
                 outs.append(out)
             except FwError as e:
                 self.failures += 1
+                failed = True
                 warn(str(e))
-        if outs:
+        if not failed:
             self._done_with(path, produced)
         for out in outs:
             self.handle(out, outdir, True, depth + 1)
@@ -1288,7 +1347,7 @@ class Extractor:
                 os.makedirs(os.path.dirname(out), exist_ok=True)
                 prog = Progress(os.path.basename(m.name), m.size)
                 src = tf.extractfile(m)
-                with open(out, "wb") as o:
+                with removed_on_error(out), open(out, "wb") as o:
                     for chunk in iter(lambda: src.read(BUF), b""):
                         o.write(chunk)
                         prog.add(len(chunk))
@@ -1432,7 +1491,13 @@ def main(argv=None):
             return 0
         if not o.outdir:
             o.outdir = os.path.basename(os.path.normpath(o.input))
-            o.outdir = re.sub(r"\.(zip|bin|img|tar|md5|lz4)$", "", o.outdir) + "_extracted"
+            stem = o.outdir
+            while True:
+                shorter = re.sub(r"\.(zip|bin|img|tar|md5|lz4|tgz|gz|xz|zst)$", "", stem, flags=re.I)
+                if shorter == stem or not shorter:
+                    break
+                stem = shorter
+            o.outdir = stem + "_extracted"
         ex = Extractor(o)
         ex.run(o.input)
     except FwError as e:

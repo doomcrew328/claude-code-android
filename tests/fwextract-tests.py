@@ -517,5 +517,76 @@ class OtherFormatTests(Base):
         self.assertEqual(os.listdir(self.d), ["payload.bin"])
 
 
+class ErrorHandlingTests(Base):
+    """What a user sees when the input is wrong, damaged or interrupted."""
+
+    def test_truncated_payload_leaves_no_partial_files(self):
+        raw = build_payload({"boot": (blob(8 * BS, 1), ["raw"]), "system": (blob(64 * BS, 2), ["raw"])})
+        p = self.write("payload.bin", raw[: len(raw) - 100 * BS])
+        self.assertEqual(run(p, "-o", self.out), 2)
+        self.assertEqual(read(self.o("boot.img")), blob(8 * BS, 1))
+        self.assertEqual(sorted(os.listdir(self.out)), ["boot.img"])
+
+    def test_truncated_zip(self):
+        z = self.p("ota.zip")
+        stored_zip(z, [("payload.bin", build_payload({"boot": (blob(8 * BS, 1), ["raw"])}), zipfile.ZIP_STORED)])
+        p = self.write("cut.zip", read(z)[:20000])
+        self.assertEqual(run(p, "-o", self.out), 2)
+
+    def test_corrupt_payload_header_is_not_a_crash(self):
+        p = self.write("payload.bin", b"CrAU" + struct.pack(">QQI", 2, 1 << 62, 0) + b"x" * 1000)
+        self.assertEqual(run(p, "-o", self.out), 2)
+
+    def test_not_firmware(self):
+        p = self.write("notes.txt", b"hello\n")
+        self.assertEqual(run(p, "-o", self.out), 1)
+        self.assertFalse(os.path.exists(self.out))
+
+    def test_partition_filter_that_matches_nothing(self):
+        sup = build_super([("system", blob(4 * BS, 1))])
+        tpath = self.p("AP_X.tar")
+        with tarfile.open(tpath, "w") as t:
+            ti = tarfile.TarInfo("super.img")
+            ti.size = len(sup)
+            t.addfile(ti, io.BytesIO(sup))
+        self.assertEqual(run(tpath, "-o", self.out, "-p", "bot"), 2)
+        self.assertEqual(os.listdir(self.out), [])  # intermediate super removed
+
+    def test_simg_name_becomes_img(self):
+        img = sample_image(6, 2)
+        p = self.write("system.simg", build_sparse(img))
+        self.assertEqual(run(p, "-o", self.out), 0)
+        self.assertEqual(read(self.o("system.img")), img)
+
+    def test_default_output_dir_name(self):
+        tpath = self.p("AP_X.tar.md5")
+        with tarfile.open(tpath, "w") as t:
+            ti = tarfile.TarInfo("vbmeta.img")
+            ti.size = 4
+            t.addfile(ti, io.BytesIO(b"AVB0"))
+        old = os.getcwd()
+        os.chdir(self.d)
+        try:
+            self.assertEqual(run(tpath), 0)
+        finally:
+            os.chdir(old)
+        self.assertTrue(os.path.exists(self.p("AP_X_extracted", "vbmeta.img")))
+
+    def test_symlinks_on_shared_storage(self):
+        archive = cpio([("init", 0o100755, b"x"), ("bin", 0o120777, b"/system/bin")])
+        p = self.write("boot.img", build_boot_v4(b"k" * 100, gzip.compress(archive)))
+        real = os.symlink
+
+        def refuse(*a, **k):  # FUSE-backed /sdcard refuses symlinks
+            raise PermissionError(1, "Operation not permitted")
+        os.symlink = refuse
+        try:
+            self.assertEqual(run(p, "-o", self.out, "--unpack-boot"), 0)
+        finally:
+            os.symlink = real
+        files = self.o("boot_unpacked", "ramdisk_files")
+        self.assertEqual(read(os.path.join(files, "bin.symlink")), b"/system/bin\n")
+
+
 if __name__ == "__main__":
     unittest.main()

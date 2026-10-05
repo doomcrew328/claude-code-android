@@ -5,11 +5,13 @@ on:
     paths:
       - "tools/fwextract.py"
       - "tests/fwextract-tests.py"
+      - "tests/fwextract-crosscheck.sh"
       - ".github/workflows/fwextract.yml"
   pull_request:
     paths:
       - "tools/fwextract.py"
       - "tests/fwextract-tests.py"
+      - "tests/fwextract-crosscheck.sh"
       - ".github/workflows/fwextract.yml"
 
 jobs:
@@ -35,3 +37,19 @@ jobs:
         run: |
           pip install lz4 zstandard brotli
           python tests/fwextract-tests.py -v
+
+  # Build fixtures with Google's own tools (mkbootimg, img2simg, mkfs.erofs)
+  # and compare against unpack_bootimg / simg2img and the original inputs.
+  crosscheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install AOSP reference tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mkbootimg android-sdk-libsparse-utils erofs-utils \
+            e2fsprogs lz4 zstd brotli cpio xz-utils
+
+      - name: Cross-check against AOSP tools
+        run: bash tests/fwextract-crosscheck.sh
