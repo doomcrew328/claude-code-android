@@ -6,12 +6,14 @@ on:
       - "tools/fwextract.py"
       - "tests/fwextract-tests.py"
       - "tests/fwextract-crosscheck.sh"
+      - "tools/setup-fwextract.sh"
       - ".github/workflows/fwextract.yml"
   pull_request:
     paths:
       - "tools/fwextract.py"
       - "tests/fwextract-tests.py"
       - "tests/fwextract-crosscheck.sh"
+      - "tools/setup-fwextract.sh"
       - ".github/workflows/fwextract.yml"
 
 jobs:
@@ -53,3 +55,8 @@ jobs:
 
       - name: Cross-check against AOSP tools
         run: bash tests/fwextract-crosscheck.sh
+
+      - name: Setup script installs a working fwextract
+        run: |
+          sudo bash tools/setup-fwextract.sh
+          fwextract --check

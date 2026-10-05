@@ -175,6 +175,7 @@ The Terminal app's gear icon opens Settings, with Memory size, Display resolutio
 | [migrate.sh](migrate.sh) | Upgrade a pinned v2.x install to the current auto-updating architecture, preserving sessions, login, and settings |
 | [scripts/](scripts/) | `check-termux-env.sh`, `config-validator.sh` |
 | [tools/fwextract.py](tools/fwextract.py) | Android firmware extractor that runs in Termux (Python stdlib only); see [docs/firmware-extractor.md](docs/firmware-extractor.md) |
+| [tools/setup-fwextract.sh](tools/setup-fwextract.sh) | One-time setup for `fwextract`: installs Python, lz4, zstd, brotli, e2fsprogs and erofs-utils, adds the `fwextract` command, runs the self-test |
 | [.claude/skills/](.claude/skills/) | `minimum-viable`, `scope-framing`, `termux-safe` |
 | [tests/](tests/) | `verify-claims.sh` (per-claim PASS/FAIL/SKIP harness); `ssrf-guard-tests.sh` |
 

@@ -142,6 +142,25 @@ def removed_on_error(path):
         raise
 
 
+IN_TERMUX = os.environ.get("PREFIX", "").startswith("/data/data/com.termux")
+
+# How to get each optional tool. In Termux, erofs-utils lives in root-repo,
+# which installs without root.
+_INSTALL = {
+    "lz4": ("pkg install lz4", "apt install lz4"),
+    "zstd": ("pkg install zstd", "apt install zstd"),
+    "brotli": ("pkg install brotli", "apt install brotli"),
+    "debugfs": ("pkg install e2fsprogs", "apt install e2fsprogs"),
+    "fsck.erofs": ("pkg install root-repo && pkg install erofs-utils", "apt install erofs-utils"),
+}
+
+
+def install_hint(tool):
+    termux, apt = _INSTALL[tool]
+    cmd = termux if IN_TERMUX else apt
+    return "%s (or run tools/setup-fwextract.sh once)" % cmd
+
+
 def have(tool):
     return shutil.which(tool) is not None
 
@@ -225,7 +244,7 @@ def zstd_decompressor():
         pass
     if have("zstd"):
         return _CliDecompressor(["zstd", "-dcq"])
-    raise FwError("zstd data found; install it with: pkg install zstd")
+    raise FwError("zstd data found; install it with: " + install_hint("zstd"))
 
 
 def brotli_decompressor():
@@ -245,7 +264,7 @@ def brotli_decompressor():
         pass
     if have("brotli"):
         return _CliDecompressor(["brotli", "-dc"])
-    raise FwError("brotli data found; install it with: pkg install brotli")
+    raise FwError("brotli data found; install it with: " + install_hint("brotli"))
 
 
 # ---- LZ4 (pure-Python fallback; Android ramdisks are usually lz4-legacy) ----
@@ -414,7 +433,7 @@ def _decompress_file(kind, src, dst, label):
             except ImportError:
                 if total > (256 << 20):
                     warn("decoding %s of lz4 in pure Python is slow; "
-                         "`pkg install lz4` makes this much faster" % human(total))
+                         "%s makes this much faster" % (human(total), install_hint("lz4")))
                 fi.seek(0)
                 lz4_stream(fi, fo, progress=prog)
         else:
@@ -993,14 +1012,14 @@ def sdat2img(transfer_list, new_dat, out_path, label):
 def unpack_fs(path, kind, outdir):
     if kind == "ext4":
         if not have("debugfs"):
-            warn("skipping %s: needs debugfs (e2fsprogs) on PATH" % path)
+            warn("skipping %s: needs debugfs: %s" % (path, install_hint("debugfs")))
             return False
         os.makedirs(outdir, exist_ok=True)
         argv = ["debugfs", "-R", "rdump / %s" % outdir, path]
     else:
         tool = "fsck.erofs" if have("fsck.erofs") else None
         if not tool:
-            warn("skipping %s: needs fsck.erofs (erofs-utils) on PATH" % path)
+            warn("skipping %s: needs fsck.erofs: %s" % (path, install_hint("fsck.erofs")))
             return False
         argv = [tool, "--extract=%s" % outdir, path]
     r = subprocess.run(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -1447,6 +1466,28 @@ def describe(path):
 # CLI
 # --------------------------------------------------------------------------
 
+def check_tools():
+    """Report which optional helpers are available. Returns 0 if all are."""
+    rows = [
+        ("lz4", "fast Samsung .lz4 images (a slower built-in decoder is used otherwise)"),
+        ("zstd", "REPLACE_ZSTD OTAs and .zst images"),
+        ("brotli", "block-based ROMs with *.new.dat.br"),
+        ("debugfs", "--unpack-fs on ext4 images"),
+        ("fsck.erofs", "--unpack-fs on erofs images"),
+    ]
+    log("python      %s  (%s)" % ("ok", sys.version.split()[0]))
+    missing = 0
+    for tool, use in rows:
+        path = shutil.which(tool)
+        if not path and tool == "zstd" and sys.version_info >= (3, 14):
+            path = "built into Python 3.14"
+        log("%-11s %s  %s" % (tool, "ok" if path else "--", use))
+        if not path:
+            missing += 1
+            log("            install: " + install_hint(tool))
+    return 0 if not missing else 3
+
+
 def main(argv=None):
     global QUIET
     ap = argparse.ArgumentParser(
@@ -1460,7 +1501,7 @@ def main(argv=None):
                "  fwextract super.img -o parts              # split dynamic partitions\n"
                "  fwextract boot.img --unpack-boot          # kernel, ramdisk files, cmdline\n",
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("input", help="firmware file or an already-unpacked directory")
+    ap.add_argument("input", nargs="?", help="firmware file or an already-unpacked directory")
     ap.add_argument("-o", "--outdir", help="output directory (default: <input>_extracted)")
     ap.add_argument("-p", "--partitions", help="comma-separated partitions to extract, e.g. boot,init_boot")
     ap.add_argument("-l", "--list", action="store_true", help="show what is inside and exit")
@@ -1473,10 +1514,16 @@ def main(argv=None):
     ap.add_argument("--keep", action="store_true",
                     help="keep intermediate files (e.g. super.img after splitting it)")
     ap.add_argument("-q", "--quiet", action="store_true", help="only print warnings and errors")
+    ap.add_argument("--check", action="store_true",
+                    help="show which optional helper tools are installed and exit")
     ap.add_argument("--version", action="version", version="%(prog)s " + __version__)
     o = ap.parse_args(argv)
     QUIET = o.quiet
 
+    if o.check:
+        return check_tools()
+    if not o.input:
+        ap.error("the input file is required (or use --check)")
     if not os.path.exists(o.input):
         print("error: %s does not exist" % o.input, file=sys.stderr)
         return 1

@@ -588,5 +588,31 @@ class ErrorHandlingTests(Base):
         self.assertEqual(read(os.path.join(files, "bin.symlink")), b"/system/bin\n")
 
 
+class SetupTests(unittest.TestCase):
+    def test_check_reports_missing_helper_with_termux_command(self):
+        real_which, real_termux = fwextract.shutil.which, fwextract.IN_TERMUX
+        fwextract.shutil.which = lambda t: None if t == "fsck.erofs" else "/bin/" + t
+        fwextract.IN_TERMUX = True
+        out = io.StringIO()
+        old_stdout, sys.stdout = sys.stdout, out
+        fwextract.QUIET = False
+        try:
+            rc = fwextract.main(["--check"])
+        finally:
+            sys.stdout = old_stdout
+            fwextract.QUIET = True
+            fwextract.shutil.which, fwextract.IN_TERMUX = real_which, real_termux
+        self.assertEqual(rc, 3)
+        self.assertIn("pkg install root-repo && pkg install erofs-utils", out.getvalue())
+
+    def test_hint_outside_termux_uses_apt(self):
+        real = fwextract.IN_TERMUX
+        fwextract.IN_TERMUX = False
+        try:
+            self.assertTrue(fwextract.install_hint("lz4").startswith("apt install lz4"))
+        finally:
+            fwextract.IN_TERMUX = real
+
+
 if __name__ == "__main__":
     unittest.main()

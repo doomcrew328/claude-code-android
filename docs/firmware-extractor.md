@@ -8,33 +8,37 @@ The usual reason to want this: you downloaded an OTA or factory image and need `
 
 ## Install
 
+One command installs everything, puts `fwextract` on your PATH, and runs the test suite on your phone to prove it works there:
+
 ```bash
-pkg install python
+pkg install git
+git clone https://github.com/ferrumclaudepilgrim/claude-code-android.git ~/claude-code-android   # skip if you already have it
+bash ~/claude-code-android/tools/setup-fwextract.sh
 termux-setup-storage          # once, so Termux can read ~/storage/downloads
 ```
 
-Run it from a clone of this repo:
+What the setup script installs (all from the normal Termux repositories, no root):
+
+| Package | Gives | Needed for |
+|---|---|---|
+| `python` | Python 3 | everything |
+| `lz4` | `lz4` | fast Samsung `.img.lz4` files. Without it a built-in Python decoder is used, which works but takes many minutes on a multi-GB `super.img.lz4`. |
+| `zstd` | `zstd` | OTAs with `REPLACE_ZSTD` operations and `.zst` images (Python 3.14+ also decodes zstd itself) |
+| `brotli` | `brotli` | block-based ROM zips with `system.new.dat.br` |
+| `e2fsprogs` | `debugfs` | `--unpack-fs` on ext4 images |
+| `erofs-utils` (from `root-repo`) | `fsck.erofs` | `--unpack-fs` on erofs images. `root-repo` is just a second package repository; installing from it does not need a rooted phone. |
+
+The script finishes with exit code 0 when everything is in place, or 3 if an optional helper could not be installed (the extractor still works; the summary names the one command to retry). Check at any time with:
 
 ```bash
-python ~/claude-code-android/tools/fwextract.py --help
+fwextract --check
 ```
 
-Or put it on your PATH as `fwextract`:
+After a `git pull`, re-run the setup script to update the installed `fwextract`.
 
-```bash
-cp ~/claude-code-android/tools/fwextract.py $PREFIX/bin/fwextract
-chmod +x $PREFIX/bin/fwextract
-```
+Inside proot Ubuntu (Path B) the same script uses `apt-get` instead of `pkg`. On a normal Linux PC it installs `fwextract` to `~/.local/bin` and prints the `apt-get` line to run yourself.
 
-Optional, for speed only. The extractor checks for these on PATH and uses them when present:
-
-```bash
-pkg install lz4 zstd brotli
-```
-
-- `lz4`: Samsung firmware ships every image as `.img.lz4`. Without the `lz4` tool a pure-Python decoder is used, which works but is slow on multi-GB `super.img.lz4` files.
-- `zstd`: needed for OTAs that use `REPLACE_ZSTD` operations and for `.zst` images. Python 3.14+ decodes zstd natively.
-- `brotli`: needed for block-based ROM zips that ship `system.new.dat.br`.
+Without the setup script, the tool also runs straight from the repo with nothing but Python: `python ~/claude-code-android/tools/fwextract.py --help`.
 
 ---
 
