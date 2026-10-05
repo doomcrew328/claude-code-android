@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `tools/fwextract.py`, an Android firmware extractor that runs on the phone in Termux with only `pkg install python`. It handles A/B OTA zips and `payload.bin` (pulling single partitions such as `boot` or `init_boot` straight out of the zip without unpacking it), Android sparse images and Motorola sparsechunk sets, `super.img` dynamic partitions, boot / init_boot / vendor_boot images (kernel, ramdisk files, dtb, cmdline), Samsung `.tar.md5` firmware with its `.img.lz4` files, and block-based `transfer.list` + `new.dat(.br)` OTAs. Guide: [docs/firmware-extractor.md](docs/firmware-extractor.md). Tests: `tests/fwextract-tests.py`, run in CI by `.github/workflows/fwextract.yml`.
+
 ## [2.9.3] - 2026-07-01
 
 A DNS reliability release. It works around a Bun bug that makes Claude Code hang on "checking connectivity" and fail with ETIMEOUT on Termux, and it makes search work out of the box on the pinned install for older devices.

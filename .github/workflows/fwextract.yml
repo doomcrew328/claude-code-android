@@ -1,0 +1,37 @@
+name: Firmware extractor
+
+on:
+  push:
+    paths:
+      - "tools/fwextract.py"
+      - "tests/fwextract-tests.py"
+      - ".github/workflows/fwextract.yml"
+  pull_request:
+    paths:
+      - "tools/fwextract.py"
+      - "tests/fwextract-tests.py"
+      - ".github/workflows/fwextract.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.8", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # Stdlib only: the tool must work with nothing but `pkg install python`.
+      - name: Tests (standard library only)
+        run: python tests/fwextract-tests.py -v
+
+      # The optional modules are only used to build lz4/zstd/brotli fixtures
+      # and to cross-check the pure-Python LZ4 decoder.
+      - name: Tests (with optional compression modules)
+        run: |
+          pip install lz4 zstandard brotli
+          python tests/fwextract-tests.py -v

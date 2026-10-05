@@ -29,3 +29,7 @@ Thumbs.db
 
 # Claude Code internal state
 .claude_session
+
+# Python bytecode
+__pycache__/
+*.pyc

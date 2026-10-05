@@ -164,6 +164,7 @@ The Terminal app's gear icon opens Settings, with Memory size, Display resolutio
 | [docs/constitution-template.md](docs/constitution-template.md) | CLAUDE.md template with Android/Termux constraints baked in |
 | [docs/avf-guide.md](docs/avf-guide.md) | AVF setup, VM configuration, ADB hardware bridge |
 | [docs/sensors.md](docs/sensors.md) | NDK sensor access from Termux |
+| [docs/firmware-extractor.md](docs/firmware-extractor.md) | Extract OTA zips, payload.bin, super, sparse, boot and Samsung firmware on the phone |
 
 ### Tools
 
@@ -173,6 +174,7 @@ The Terminal app's gear icon opens Settings, with Memory size, Display resolutio
 | [install-pinned.sh](install-pinned.sh) | Opt-in pinned installer (Claude Code 2.1.112, no patched binary, no auto-update); stays pinned |
 | [migrate.sh](migrate.sh) | Upgrade a pinned v2.x install to the current auto-updating architecture, preserving sessions, login, and settings |
 | [scripts/](scripts/) | `check-termux-env.sh`, `config-validator.sh` |
+| [tools/fwextract.py](tools/fwextract.py) | Android firmware extractor that runs in Termux (Python stdlib only); see [docs/firmware-extractor.md](docs/firmware-extractor.md) |
 | [.claude/skills/](.claude/skills/) | `minimum-viable`, `scope-framing`, `termux-safe` |
 | [tests/](tests/) | `verify-claims.sh` (per-claim PASS/FAIL/SKIP harness); `ssrf-guard-tests.sh` |
 

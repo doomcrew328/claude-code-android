@@ -3,6 +3,7 @@
 # Windows contributors check out a repo with core.autocrlf=true.
 
 *.sh   text eol=lf
+*.py   text eol=lf
 *.md   text eol=lf
 *.txt  text eol=lf
 *.yml  text eol=lf
