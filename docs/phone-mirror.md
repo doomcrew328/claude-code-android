@@ -8,7 +8,17 @@ A phone's USB-C port cannot take video in, and a phone cannot be a Miracast/Smar
 
 Limits: a few frames per second (screenshot polling). Fine for menus, apps and files; not for video or games. Both phones must be on the same Wi-Fi (a hotspot from either phone works).
 
-## Setup
+## Quick start (one paste)
+
+In Termux on the viewing phone:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/doomcrew328/claude-code-android/ccr-37a4fc87-g1tskx/examples/phone-mirror-setup.sh | bash
+```
+
+It installs what is needed, asks for the pairing details from the other phone, connects and starts the viewer. The branch name in the URL changes if this is merged.
+
+## Manual setup
 
 On the viewing phone (Termux):
 
