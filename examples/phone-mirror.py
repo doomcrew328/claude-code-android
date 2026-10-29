@@ -33,7 +33,7 @@ html,body{margin:0;height:100%;background:#000;color:#ccc;font:14px sans-serif}
 #bar{display:flex;gap:6px;padding:6px;background:#111}
 #bar button{flex:1;padding:10px;font-size:16px;background:#222;color:#fff;border:0;border-radius:6px}
 #v{display:block;margin:0 auto;max-width:100%;max-height:calc(100% - 52px);touch-action:manipulation}
-#s{position:fixed;right:6px;bottom:4px;font-size:11px;opacity:.6}
+#s{position:fixed;left:6px;right:6px;bottom:4px;font-size:12px;opacity:.8;word-break:break-word}
 </style>
 <div id=bar>
 <button onclick="key(4)">Back</button><button onclick="key(3)">Home</button>
@@ -45,7 +45,7 @@ const v=document.getElementById('v'),s=document.getElementById('s');
 let n=0,t0=Date.now();
 function next(){v.src='/frame?'+(n++)}
 v.onload=()=>{const fps=n*1000/(Date.now()-t0);s.textContent=fps.toFixed(1)+' fps';next()};
-v.onerror=()=>{s.textContent='no frame, retrying';setTimeout(next,1500)};
+v.onerror=()=>{fetch('/frame?err').then(r=>r.text()).then(t=>{s.textContent='NO FRAME: '+t.slice(0,300)}).catch(()=>{s.textContent='NO FRAME: server unreachable'});setTimeout(next,2000)};
 v.onclick=e=>{const r=v.getBoundingClientRect();
  const x=Math.round((e.clientX-r.left)/r.width*v.naturalWidth);
  const y=Math.round((e.clientY-r.top)/r.height*v.naturalHeight);
