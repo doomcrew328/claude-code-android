@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#04070a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Leaseline">
+<title>LEASELINE — Alberta Lease Navigation</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="map"></div>
+<canvas id="labels"></canvas>
+<div id="vignette"></div>
+
+<!-- top: search + status -->
+<header id="top">
+  <form id="searchForm" class="glass cut" autocomplete="off">
+    <svg class="ico" viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 5.9 12.1l4.2 4.2-1.4 1.4-4.2-4.2A7.5 7.5 0 1 1 10.5 3zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"/></svg>
+    <input id="q" inputmode="text" spellcheck="false" autocapitalize="characters" placeholder="LSD · UWI · LAT,LON">
+    <button type="submit" class="go">GO</button>
+  </form>
+  <div id="suggest" class="glass hidden"></div>
+  <div id="chips">
+    <span class="chip" id="chipGps"><i></i>GPS —</span>
+    <span class="chip" id="chipNet"><i></i>NET</span>
+    <span class="chip" id="chipData"><i></i>ROADS —</span>
+  </div>
+</header>
+
+<!-- nav banner -->
+<section id="navBanner" class="glass cut hidden">
+  <div class="mvr"><svg id="mvrIcon" viewBox="0 0 64 64"></svg></div>
+  <div class="mvt">
+    <div class="mvd"><b id="mvDist">—</b><span id="mvKm"></span></div>
+    <div id="mvText">—</div>
+    <div id="mvNext" class="dim"></div>
+  </div>
+</section>
+
+<!-- right rail -->
+<nav id="rail">
+  <button class="rb" id="bFollow" title="Follow"><svg viewBox="0 0 24 24"><path d="M12 2l7 19-7-4-7 4z"/></svg><span>FREE</span></button>
+  <button class="rb" id="bLayers" title="Layers"><svg viewBox="0 0 24 24"><path d="M12 3l10 5-10 5L2 8zm-7.6 8.3L12 15l7.6-3.7L22 12.5 12 17.5 2 12.5zm0 4.5L12 19.5l7.6-3.7L22 17 12 22 2 17z"/></svg><span>MAP</span></button>
+  <button class="rb" id="bRec" title="Record track"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg><span>REC</span></button>
+  <button class="rb" id="bPacks" title="Offline"><svg viewBox="0 0 24 24"><path d="M11 3h2v10l3.5-3.5 1.4 1.4L12 16.8l-5.9-5.9 1.4-1.4L11 13zM4 19h16v2H4z"/></svg><span>SAVE</span></button>
+  <button class="rb" id="bMenu" title="Menu"><svg viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg><span>MORE</span></button>
+</nav>
+
+<!-- probe (tap on map) -->
+<div id="probe" class="glass cut hidden"></div>
+
+<!-- bottom HUD -->
+<footer id="hud" class="glass cut">
+  <div id="hsiWrap">
+    <svg id="hsi" viewBox="-60 -60 120 120"></svg>
+    <div id="hdgBox">---°</div>
+  </div>
+  <div id="readouts">
+    <div class="ro wide"><label>POSITION · LSD</label><b id="roLsd">ACQUIRING…</b></div>
+    <div class="ro"><label>SPD km/h</label><b id="roSpd">--</b></div>
+    <div class="ro tap" id="roOdoBox"><label>TRIP km <em>↺</em></label><b id="roOdo">0.0</b></div>
+    <div class="ro"><label>ACC m</label><b id="roAcc">--</b></div>
+  </div>
+  <div id="target" class="hidden">
+    <div class="tgtTop">
+      <div><label>TARGET</label><b id="tgLabel">—</b></div>
+      <div class="tgtNums"><span id="tgDist">—</span><span id="tgBrg">—</span></div>
+      <button class="x" id="tgClear" aria-label="Clear target">✕</button>
+    </div>
+    <div class="tgtBtns">
+      <button class="act prime" id="bRoute">ROUTE</button>
+      <button class="act" id="bWx">LEASE WX</button>
+      <button class="act" id="bShare">SHARE</button>
+      <button class="act" id="bPin">PIN</button>
+    </div>
+  </div>
+  <div id="navBar" class="hidden">
+    <div class="ro"><label>REMAIN</label><b id="nvRem">—</b></div>
+    <div class="ro"><label>ETA</label><b id="nvEta">—</b></div>
+    <div class="ro"><label>ROUTE km</label><b id="nvAlong">—</b></div>
+    <button class="act" id="bLog">ROAD LOG</button>
+    <button class="act warn" id="bEnd">END</button>
+  </div>
+</footer>
+
+<!-- sheets -->
+<div id="sheetBack" class="hidden"></div>
+<section id="sheet" class="glass cut hidden"><div class="grab"></div><div id="sheetBody"></div></section>
+
+<div id="toast" class="hidden"></div>
+<div id="busy" class="hidden"><div class="ring"></div><div id="busyText">WORKING</div></div>
+
+<!-- boot -->
+<div id="boot">
+  <div class="bootGrid"></div>
+  <div class="bootInner">
+    <div class="logo"><span>LEASE</span><span class="l2">LINE</span></div>
+    <div class="sub">ALBERTA LEASE NAVIGATION SYSTEM</div>
+    <ul id="bootLog"></ul>
+    <div class="bar"><i id="bootBar"></i></div>
+  </div>
+</div>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
