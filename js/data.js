@@ -11,10 +11,10 @@ export const MAJOR_TYPES = [3, 5, 6, 7, 8, 9];
 let dbp;
 function db() {
   if (!dbp) dbp = new Promise((res, rej) => {
-    const r = indexedDB.open('leaseline', 2);
+    const r = indexedDB.open('leaseline', 3);
     r.onupgradeneeded = () => {
       const d = r.result;
-      for (const s of ['cells', 'cuts', 'tracks', 'kv']) if (!d.objectStoreNames.contains(s)) d.createObjectStore(s);
+      for (const s of ['cells', 'cuts', 'tracks', 'kv', 'photos']) if (!d.objectStoreNames.contains(s)) d.createObjectStore(s);
     };
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   });

@@ -2,6 +2,7 @@
 import { LsdDB, parseQuery, fmtLSD } from './lsd.js';
 import * as D from './data.js';
 import { Graph, route as planPath, dist, bearing, compass, compassShort, progressOn, cumulative, ROAD_TYPES } from './route.js';
+import * as V2 from './v2.js';
 
 const $ = (s) => document.querySelector(s);
 const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
@@ -168,8 +169,10 @@ function animateRoute() {
 // ---------------- viewport data ----------------
 let dataTimer;
 const refreshDataSoon = () => { clearTimeout(dataTimer); dataTimer = setTimeout(refreshData, 250); };
+let refreshSeq = 0;
 async function refreshData() {
   const m = S.map; if (!m) return;
+  const seq = ++refreshSeq;               // newer calls win; stale results are dropped
   const z = m.getZoom(), b = m.getBounds();
   const w = b.getWest(), s = b.getSouth(), e = b.getEast(), n = b.getNorth();
   // grid from on-device ATS database (always offline)
@@ -178,18 +181,12 @@ async function refreshData() {
     S.gridFC = S.db.gridGeoJSON(w - pad, s - pad, e + pad, n + pad, z >= 13);
     m.getSource('grid').setData(S.gridFC);
   } else if (S.gridFC) { S.gridFC = null; m.getSource('grid').setData(fc()); }
-  // roads
-  if (z >= 10.8) {
-    try {
-      const feats = await D.roadsIn(w, s, e, n, S.online, 'cells', 30);
-      S.roadsCount = feats.length;
-      m.getSource('roads').setData(fc(feats));
-    } catch (err) { console.warn(err); }
-  }
-  if (z >= 12.5 && S.prefs.cuts) {
-    try { m.getSource('cuts').setData(fc(await D.roadsIn(w, s, e, n, S.online, 'cuts', 16))); } catch { }
-  }
+  try { V2.refresh(w, s, e, n, z); } catch (err) { console.warn(err); }   // wells + rigs are local, draw them first
+  const jobs = [];
+  if (z >= 10.8) jobs.push(D.roadsIn(w, s, e, n, S.online, 'cells', 30).then(feats => { if (seq !== refreshSeq) return; S.roadsCount = feats.length; m.getSource('roads').setData(fc(feats)); updateChips(); }).catch(err => console.warn(err)));
+  if (z >= 12.5 && S.prefs.cuts) jobs.push(D.roadsIn(w, s, e, n, S.online, 'cuts', 16).then(feats => { if (seq === refreshSeq) m.getSource('cuts').setData(fc(feats)); }).catch(() => { }));
   updateChips();
+  await Promise.all(jobs);
 }
 
 // ---------------- labels canvas (section + LSD numbers, in cockpit font) ----------------
@@ -199,7 +196,9 @@ function sizeCanvas() { dpr = Math.min(2, window.devicePixelRatio || 1); cv.widt
 function drawLabelsSoon() { if (labelPending) return; labelPending = true; requestAnimationFrame(() => { labelPending = false; drawLabels(); }); }
 function drawLabels() {
   cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.clearRect(0, 0, innerWidth, innerHeight);
-  const m = S.map; if (!m || !S.gridFC || !S.prefs.grid) return;
+  const m = S.map; if (!m) return;
+  try { V2.drawLabels(cx, m); } catch { }
+  if (!S.gridFC || !S.prefs.grid) return;
   const z = m.getZoom(); if (z < 11.5) return;
   cx.textAlign = 'center'; cx.textBaseline = 'middle';
   for (const f of S.gridFC.features) {
@@ -344,6 +343,7 @@ function renderSuggest(v) {
     const p = parseQuery(t);
     if (p?.error) items.push(`<div class="sg err">${p.error}</div>`);
     else if (p) { const r = resolve(p); if (r?.error) items.push(`<div class="sg err">${r.error}</div>`); else if (r) items.push(sgRow(r.label, describe(r), 'q:' + t)); }
+    for (const [a, b, k] of V2.suggest(t)) items.push(sgRow(a, b, k));
     const lower = t.toLowerCase();
     S.pins.filter(x => x.name.toLowerCase().includes(lower)).slice(0, 5).forEach(x => items.push(sgRow('★ ' + x.name, x.label, 'pin:' + x.id)));
   } else {
@@ -354,7 +354,8 @@ function renderSuggest(v) {
   sg.classList.toggle('hidden', !items.length);
   sg.querySelectorAll('[data-k]').forEach(el => el.addEventListener('pointerdown', (e) => {
     e.preventDefault(); const k = el.dataset.k;
-    if (k.startsWith('pin:')) { const pin = S.pins.find(x => x.id === k.slice(4)); if (pin) setTarget({ kind: 'PIN', center: pin.center, quad: pin.quad, label: pin.label, name: pin.name, d: pin.d }); }
+    if (k.startsWith('v2:')) V2.pick(k);
+    else if (k.startsWith('pin:')) { const pin = S.pins.find(x => x.id === k.slice(4)); if (pin) setTarget({ kind: 'PIN', center: pin.center, quad: pin.quad, label: pin.label, name: pin.name, d: pin.d, site: pin }); }
     else runQuery(k.slice(2));
     $('#q').blur();
   }));
@@ -377,8 +378,9 @@ function resolve(p) {
   return { ...r, d: p };
 }
 function runQuery(v) {
+  if (V2.query(v)) { $('#q').blur(); return; }
   const p = parseQuery(v);
-  if (!p) { const pin = S.pins.find(x => x.name.toLowerCase() === v.trim().toLowerCase()); if (pin) return setTarget({ kind: 'PIN', center: pin.center, quad: pin.quad, label: pin.label, name: pin.name }); return toast('Type an LSD like 11-04-068-10 W5'); }
+  if (!p) { const pin = S.pins.find(x => x.name.toLowerCase() === v.trim().toLowerCase()); if (pin) return setTarget({ kind: 'PIN', center: pin.center, quad: pin.quad, label: pin.label, name: pin.name, site: pin }); return toast('Try an LSD (16-25-045-12 W5), UWI, licence #, town or company'); }
   const r = resolve(p);
   if (r.error) return toast(r.error);
   S.history = [{ q: v.trim(), label: r.label }, ...S.history.filter(h => h.label !== r.label)].slice(0, 12); store.set('history', S.history);
@@ -387,7 +389,7 @@ function runQuery(v) {
 }
 
 // ---------------- target ----------------
-function setTarget(t) {
+function setTarget(t, opts = {}) {
   S.target = t;
   if (S.nav) endNav(true);
   const feats = [];
@@ -398,8 +400,10 @@ function setTarget(t) {
   $('#target').classList.remove('hidden'); setHudVar();
   clearRouteDisplay();
   setFollow('free');
+  V2.onTarget(t);
   const pad = { top: 140, bottom: ($('#hud').offsetHeight || 200) + 30, left: 40, right: 80 };
-  if (S.pos) {
+  if (opts.keepView) { /* trip planner fits the whole route itself */ }
+  else if (S.pos) {
     const b = new maplibregl.LngLatBounds([S.pos.lon, S.pos.lat], [S.pos.lon, S.pos.lat]).extend(t.center);
     if (dist([S.pos.lon, S.pos.lat], t.center) < 60000) S.map.fitBounds(b, { padding: pad, maxZoom: 15, duration: 900 });
     else S.map.flyTo({ center: t.center, zoom: 14.5, duration: 1100 });
@@ -416,11 +420,12 @@ function setTarget(t) {
 }
 function clearTarget() {
   S.target = null; if (S.nav) endNav(true);
-  S.tgtMarker.remove(); S.map.getSource('target').setData(fc()); clearRouteDisplay();
+  S.tgtMarker.remove(); S.map.getSource('target').setData(fc()); clearRouteDisplay(); V2.onTarget(null);
   $('#target').classList.add('hidden'); setHudVar(); drawHSI();
 }
 function onMapTap(ll) {
   if (!S.db) return;
+  if (V2.tap(ll)) return;
   const w = S.db.whereIs(ll.lng, ll.lat);
   const pr = $('#probe');
   if (!w) { pr.classList.add('hidden'); return; }
@@ -432,34 +437,55 @@ function onMapTap(ll) {
 }
 
 // ---------------- routing ----------------
-async function doRoute(reroute = false) {
-  if (!S.target) return;
-  if (!S.pos) return toast('Waiting for a GPS fix…');
-  const from = [S.pos.lon, S.pos.lat], to = S.target.center;
-  if (!reroute) busy('PLOTTING ROUTE');
+async function doRoute(reroute = false, opts = {}) {
+  // stops: explicit trip stops, the remaining trip stops on a reroute, or just the target
+  let stops = opts.stops;
+  if (!stops && reroute && S.route?.stops?.length > 1) stops = S.route.stops.filter(st => st.km * 1000 > (S.nav?.along || 0) + 30).map(st => ({ center: st.center, label: st.label }));
+  if (!stops || !stops.length) { if (!S.target) return; stops = [{ center: S.target.center, label: S.target.label }]; }
+  const from = opts.from || (S.pos ? [S.pos.lon, S.pos.lat] : null);
+  if (!from) return toast('Waiting for a GPS fix…');
+  const all = [from, ...stops.map(st => st.center)];
+  if (!reroute) busy(stops.length > 1 ? 'PLOTTING TRIP' : 'PLOTTING ROUTE');
   try {
-    const w = Math.min(from[0], to[0]), e = Math.max(from[0], to[0]), s = Math.min(from[1], to[1]), n = Math.max(from[1], to[1]);
+    const xs = all.map(p => p[0]), ys = all.map(p => p[1]);
+    const w = Math.min(...xs), e = Math.max(...xs), s = Math.min(...ys), n = Math.max(...ys);
     const padX = Math.max(0.08, (e - w) * 0.15), padY = Math.max(0.05, (n - s) * 0.15);
     const box = [w - padX, s - padY, e + padX, n + padY];
     let feats = [];
     if (S.online) {
-      const [a, b, c] = await Promise.all([
-        D.roadsIn(to[0] - 0.16, to[1] - 0.1, to[0] + 0.16, to[1] + 0.1, true, 'cells', 20),
-        D.roadsIn(from[0] - 0.08, from[1] - 0.05, from[0] + 0.08, from[1] + 0.05, true, 'cells', 9),
-        D.majorsIn(...box, true).catch(() => []),
-      ]);
-      feats = [...a, ...b, ...c];
+      const jobs = [D.roadsIn(from[0] - 0.08, from[1] - 0.05, from[0] + 0.08, from[1] + 0.05, true, 'cells', 9), D.majorsIn(...box, true).catch(() => [])];
+      for (const st of stops) jobs.push(D.roadsIn(st.center[0] - 0.16, st.center[1] - 0.1, st.center[0] + 0.16, st.center[1] + 0.1, true, 'cells', 20));
+      feats = (await Promise.all(jobs)).flat();
     }
     feats = D.dedupe([...feats, ...await D.allCachedRoadsIn(...box)]);
     const g = new Graph(); g.addFeatures(feats);
     for (const t of S.tracks) if (t.use !== false) g.addLine(t.pts.map(p => [p[0], p[1]]), 99, t.name);
     g.stitch(12);
-    const r = planPath(g, from, to);
-    if (r.error) { busy(false); return toast(r.error + (S.online ? '' : ' (offline: only saved areas are on the phone)')); }
+    // route each leg and join them
+    const legs = [];
+    for (let k = 0; k < all.length - 1; k++) {
+      const r = planPath(g, all[k], all[k + 1]);
+      if (r.error) { busy(false); return toast((all.length > 2 ? `Leg ${k + 1}: ` : '') + r.error + (S.online ? '' : ' (offline: only saved areas are on the phone)')); }
+      legs.push(r);
+    }
+    const r = { path: [], segs: [], steps: [], meters: 0, seconds: 0, stops: [], lastMiles: [] };
+    legs.forEach((L, k) => {
+      const kmOff = r.meters / 1000;
+      r.path.push(...(k ? L.path.slice(1) : L.path)); r.segs.push(...L.segs);
+      L.steps.forEach((st, q) => {
+        if (k && q === 0) return; // the next leg starts where the last one arrived
+        const isArrive = q === L.steps.length - 1;
+        const text = isArrive && k < legs.length - 1 ? `Stop ${k + 1}: ${stops[k].label}` : isArrive && legs.length > 1 ? `Final stop: ${stops[k].label}` : st.text;
+        r.steps.push({ ...st, km: st.km + kmOff, text, stop: isArrive ? k : undefined });
+      });
+      r.meters += L.meters; r.seconds += L.seconds;
+      r.stops.push({ center: stops[k].center, label: stops[k].label, km: r.meters / 1000, lastMile: L.lastMile, end: L.path[L.path.length - 1] });
+    });
+    r.lastMile = legs[legs.length - 1].lastMile;
     r.cum = cumulative(r.path);
     S.route = r;
     S.map.getSource('route').setData(fc([line(r.path)]));
-    S.map.getSource('last').setData(fc(r.lastMile > 25 ? [line([r.path[r.path.length - 1], to])] : []));
+    S.map.getSource('last').setData(fc(r.stops.filter(st => st.lastMile > 25).map(st => line([st.end, st.center]))));
     if (!reroute) {
       S.map.fitBounds(r.path.reduce((b, p) => b.extend(p), new maplibregl.LngLatBounds(r.path[0], r.path[0])), { padding: { top: 140, bottom: ($('#hud').offsetHeight || 200) + 30, left: 40, right: 80 }, maxZoom: 15, duration: 900 });
       showRouteSheet(r);
@@ -479,6 +505,7 @@ function showRouteSheet(r) {
   openSheet(`<h2>ROUTE PLOTTED</h2>
     <div class="kv"><span>DRIVE</span><b>${(r.meters / 1000).toFixed(1)} km · ~${Math.round(r.seconds / 60)} min</b>
     <span>ETA</span><b>${eta.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b>
+    ${r.stops && r.stops.length > 1 ? `<span>STOPS</span><b>${r.stops.length}</b>` : ''}
     <span>LAST LEG</span><b>${r.lastMile > 25 ? fmtDist(r.lastMile) + ' off mapped road to LSD centre' : 'road reaches the LSD'}</b></div>
     <p class="dim">Built on Alberta's road layer${S.tracks.length ? ' plus your recorded tracks' : ''}. Lease roads built after the government's last update won't show — follow site directions if they disagree.</p>
     <div class="btnRow"><button class="act prime" id="bStart">START NAV</button><button class="act" id="bLog2">ROAD LOG</button></div>`);
@@ -516,7 +543,9 @@ function endNav(silent) {
 function navTick() {
   const r = S.route, nv = S.nav; if (!r || !nv || !S.pos) return;
   const p = [S.pos.lon, S.pos.lat];
-  const pr = progressOn(r.path, r.cum, p);
+  // look around the last known progress so a winding road can't make us "jump ahead"
+  let pr = nv.along > 0 ? progressOn(r.path, r.cum, p, nv.along - 400, nv.along + 2500) : progressOn(r.path, r.cum, p);
+  if (pr.off === Infinity) pr = progressOn(r.path, r.cum, p);
   nv.along = pr.along;
   const total = r.cum[r.cum.length - 1];
   const remain = Math.max(0, total - pr.along);
@@ -525,7 +554,7 @@ function navTick() {
   if (ahead.length > 1) S.map.getSource('route').setData(fc([line(ahead)]));
   // off-route → reroute (works offline from cached roads)
   if (!nv.lastMile && pr.off > Math.max(50, (S.pos.acc || 10) * 1.5)) nv.off++; else nv.off = 0;
-  if (nv.off >= 3 && Date.now() - nv.lastReroute > 15000) { nv.lastReroute = Date.now(); nv.off = 0; say('Off route. Recalculating.'); toast('OFF ROUTE — RECALCULATING'); doRoute(true).then(() => { if (S.route) { nv.stepIdx = 1; nv.spoken = {}; } }); return; }
+  if (nv.off >= 3 && Date.now() - nv.lastReroute > 15000) { nv.lastReroute = Date.now(); nv.off = 0; say('Off route. Recalculating.'); toast('OFF ROUTE — RECALCULATING'); doRoute(true).then(() => { if (S.route) { nv.stepIdx = 1; nv.spoken = {}; nv.along = 0; nv.off = 0; } }); return; }
   // arrival at end of mapped road → last-mile mode
   if (remain < 35 && !nv.lastMile) { nv.lastMile = true; say(r.lastMile > 25 ? `End of mapped road. Lease centre is ${Math.round(r.lastMile)} metres ${compass(bearing(p, S.target.center))}.` : 'You have arrived.'); }
   let step = null;
@@ -713,8 +742,8 @@ function showSOS() {
     <div class="big">${w ? (w.onGrid ? '' : '≈ ') + w.label : '—'}</div>
     <div class="kv"><span>LAT/LON</span><b>${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}</b><span>DMS</span><b>${dms(p.lat, 'N', 'S')} ${dms(p.lon, 'E', 'W')}</b>
     <span>ACCURACY</span><b>±${Math.round(p.acc)} m</b><span>FIX</span><b>${new Date(p.ts).toLocaleTimeString()}</b></div>
-    <div class="btnRow"><button class="act prime" id="sosCopy">COPY</button><button class="act" id="sosShare">SEND</button><a class="act warn" href="tel:911" style="display:grid;place-items:center;text-decoration:none">CALL 911</a></div>` : '<p>No GPS fix yet.</p>'}`);
-  if (p) { $('#sosCopy').onclick = () => copy(txt); $('#sosShare').onclick = async () => { try { await navigator.share({ text: txt }); } catch { copy(txt); } }; }
+    <div class="btnRow"><button class="act prime" id="sosCopy">COPY</button><button class="act" id="sosShare">SEND</button><a class="act warn" href="tel:911" style="display:grid;place-items:center;text-decoration:none">CALL 911</a></div>${V2.sosHtml()}` : '<p>No GPS fix yet.</p>'}`);
+  if (p) { $('#sosCopy').onclick = () => copy(txt); $('#sosShare').onclick = async () => { try { await navigator.share({ text: txt }); } catch { copy(txt); } }; V2.wireSos(); }
 }
 
 // ---------------- layers / menu / about ----------------
@@ -722,18 +751,18 @@ function showLayers() {
   const p = S.prefs;
   openSheet(`<h2>MAP</h2>
     <div class="seg"><button data-base="sat" class="${p.base === 'sat' ? 'on' : ''}">SATELLITE</button><button data-base="tac" class="${p.base === 'tac' ? 'on' : ''}">TACTICAL</button></div>
-    ${[['terrain', '3D TERRAIN', 'online only'], ['grid', 'LSD GRID', 'sections, quarters, LSD numbers'], ['cuts', 'CUTLINES', 'seismic / pipeline cuts'], ['tracks', 'YOUR ROADS', 'recorded + imported tracks'], ['voice', 'VOICE', 'spoken turn prompts']]
+    ${[['terrain', '3D TERRAIN', 'online only'], ['wells', 'WELLS', 'AER well sites · red ring = sour'], ['rigs', 'RIGS', 'drilling activity, last 30 days'], ['grid', 'LSD GRID', 'sections, quarters, LSD numbers'], ['cuts', 'CUTLINES', 'seismic / pipeline cuts'], ['tracks', 'YOUR ROADS', 'recorded + imported tracks'], ['voice', 'VOICE', 'spoken turn prompts']]
       .map(([k, t, s]) => `<div class="row"><div class="grow"><b>${t}</b><small>${s}</small></div><button class="tog ${p[k] ? 'on' : ''}" data-tog="${k}"></button></div>`).join('')}
     <h3>ROAD KEY</h3>
-    <div class="kv" style="font-size:12px">${[['#f5f8fa', 'paved highway'], ['#ffb43c', 'two-lane gravel'], ['#ef8f2a', 'one-lane gravel'], ['#d0904c', 'dry-weather (dashed)'], ['#86c0ff', 'winter road (dashed)'], ['#b08f63', 'lease access / driveway'], ['#62e39a', 'cutline'], ['#3be6ff', 'your tracks'], ['#ff3df2', 'active route']].map(([c, t]) => `<span style="display:inline-block;width:26px;height:4px;margin-top:7px;background:${c};box-shadow:0 0 6px ${c}"></span><b style="font-weight:400">${t}</b>`).join('')}</div>`);
+    <div class="kv" style="font-size:12px">${[['#f5f8fa', 'paved highway'], ['#ffb43c', 'two-lane gravel'], ['#ef8f2a', 'one-lane gravel'], ['#d0904c', 'dry-weather (dashed)'], ['#86c0ff', 'winter road (dashed)'], ['#b08f63', 'lease access / driveway'], ['#62e39a', 'cutline'], ['#3be6ff', 'your tracks'], ['#ff3df2', 'active route'], ['#46ff9a', 'well: active'], ['#ffb43c', 'well: suspended'], ['#7f93a1', 'well: abandoned'], ['#ff4d5e', 'ring: sour well'], ['#c6ff3d', 'drilling rig']].map(([c, t]) => `<span style="display:inline-block;width:26px;height:4px;margin-top:7px;background:${c};box-shadow:0 0 6px ${c}"></span><b style="font-weight:400">${t}</b>`).join('')}</div>`);
   document.querySelectorAll('[data-base]').forEach(b => b.onclick = () => { p.base = b.dataset.base; savePrefs(); applyPrefs(); showLayers(); });
-  document.querySelectorAll('[data-tog]').forEach(b => b.onclick = () => { const k = b.dataset.tog; p[k] = !p[k]; if (k === 'terrain' && p[k] && !S.online) toast('3D terrain needs signal'); savePrefs(); applyPrefs(); if (k === 'cuts' || k === 'grid') refreshData(); showLayers(); });
+  document.querySelectorAll('[data-tog]').forEach(b => b.onclick = () => { const k = b.dataset.tog; p[k] = !p[k]; if (k === 'terrain' && p[k] && !S.online) toast('3D terrain needs signal'); savePrefs(); applyPrefs(); V2.applyVis(); if (['cuts', 'grid', 'wells', 'rigs'].includes(k)) refreshData(); if (k === 'wells' && p.wells) V2.ensureWells(true); showLayers(); });
 }
 function showMenu() {
   openSheet(`<h2>SYSTEMS</h2>
-    ${[['mPins', '★ PINS', `${S.pins.length} saved`], ['mTracks', 'YOUR ROADS', `${S.tracks.length} tracks · GPX share/import`], ['mSOS', 'EMERGENCY LOCATION', 'LSD + coordinates for 911'], ['mOdo', 'RESET TRIP ODOMETER', `${(S.odo.m / 1000).toFixed(1)} km`], ['mAbout', 'ABOUT & ACCURACY', 'data sources, limits']]
+    ${[...V2.menuRows(), ['mTracks', 'YOUR ROADS', `${S.tracks.length} tracks · GPX share/import`], ['mSOS', 'EMERGENCY LOCATION', 'LSD + coordinates for 911'], ['mOdo', 'RESET TRIP ODOMETER', `${(S.odo.m / 1000).toFixed(1)} km`], ['mAbout', 'ABOUT & ACCURACY', 'data sources, limits']]
       .map(([id, t, s]) => `<div class="row" id="${id}"><div class="grow"><b>${t}</b><small>${s}</small></div><span class="dim">›</span></div>`).join('')}`);
-  $('#mPins').onclick = showPins; $('#mTracks').onclick = showTracks; $('#mSOS').onclick = showSOS; $('#mAbout').onclick = showAbout;
+  V2.wireMenu(); $('#mTracks').onclick = showTracks; $('#mSOS').onclick = showSOS; $('#mAbout').onclick = showAbout;
   $('#mOdo').onclick = () => { resetOdo(); closeSheet(); };
 }
 function showAbout() {
@@ -741,8 +770,11 @@ function showAbout() {
   <p><b style="color:var(--amber)">LSD positions</b> come from the Government of Alberta's ATS v4.1 survey grid, stored on the phone (all 252,578 sections). Checked against the official LSD polygons: typically within ~4 m of the official LSD centre, worst case found ~35 m. Fractional sections use the official centres directly. Online, the exact official LSD outline is drawn.</p>
   <p><b style="color:var(--amber)">Roads & cutlines</b>: Alberta Base Features (Access & Facility Roads, Cutlines). New lease roads appear only after the province updates its layer — record your own tracks to fill gaps.</p>
   <p><b style="color:var(--amber)">Routing</b> runs on the phone, so it keeps working with no signal over any roads already stored.</p>
-  <p><b style="color:var(--amber)">Not covered</b>: Saskatchewan/BC grids, well licences and facility names.</p>
-  <p class="dim">Contains information licensed under the Open Government Licence – Alberta. Imagery © Esri, Maxar, Earthstar Geographics. Terrain: AWS Terrain Tiles. Weather: Open-Meteo. Personal-use build — always follow site directions and your company's journey management.</p>`);
+  <p><b style="color:var(--amber)">Wells</b>: AER ST37 well list (monthly) for every site that physically exists (cancelled and reclaimed licences left out), plus wells licensed since then from the AER daily licence list. Search by licence, UWI (goes to the surface lease), company or well name. Red ring = AER sour (H2S) category.</p>
+  <p><b style="color:var(--amber)">Rigs</b>: AER ST49 daily drilling activity, last 30 days, refreshed daily.</p>
+  <p><b style="color:var(--amber)">Places &amp; hospitals</b>: Alberta Geographic Names; Statistics Canada ODHF (2020) with Grande Prairie Regional Hospital added.</p>
+  <p><b style="color:var(--amber)">Not covered</b>: Saskatchewan/BC grids, pipelines, facility (battery/plant) names.</p>
+  <p class="dim">Contains information licensed under the Open Government Licence – Alberta and the Open Government Licence – Canada. Well and rig data: Alberta Energy Regulator. Imagery © Esri, Maxar, Earthstar Geographics. Terrain: AWS Terrain Tiles. Weather: Open-Meteo. Personal-use build — always follow site directions and your company's journey management.</p>`);
 }
 function resetOdo() { S.odo = { m: 0 }; S.odoLast = S.pos ? [S.pos.lon, S.pos.lat] : null; store.set('odo', S.odo); updateHud(); toast('Trip odometer reset'); }
 
@@ -759,11 +791,17 @@ function line(pts) { return { type: 'Feature', properties: {}, geometry: { type:
 function circle(c, r) { const pts = []; for (let i = 0; i <= 48; i++) { const a = i / 48 * 2 * Math.PI; pts.push([c[0] + r / (111320 * Math.cos(c[1] * Math.PI / 180)) * Math.cos(a), c[1] + r / 110574 * Math.sin(a)]); } return { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [pts] } }; }
 
 // ---------------- wire up ----------------
+function savePins() { store.set('pins', S.pins); }
+function refreshTargetLabel() { if (S.target) $('#tgLabel').textContent = S.target.name ? `${S.target.name} · ${S.target.label}` : S.target.label; }
+const API = { S, store, fc, line, fmtDist, toast, busy, openSheet, closeSheet, setTarget, copy, addPin, savePins, refreshTargetLabel, shareTarget, ROAD_TYPES,
+  refresh: () => refreshData(), setHud: () => setHudVar(), route: (opts) => doRoute(false, opts) };
 function initUI() {
   initSearch();
+  V2.init(API);
   $('#bFollow').onclick = () => setFollow(S.follow === 'free' ? 'north' : S.follow === 'north' ? 'heading' : 'free');
   $('#bLayers').onclick = showLayers; $('#bRec').onclick = toggleRec; $('#bPacks').onclick = showPacks; $('#bMenu').onclick = showMenu;
-  $('#tgClear').onclick = clearTarget; $('#bRoute').onclick = () => doRoute(false); $('#bWx').onclick = showWeather; $('#bShare').onclick = shareTarget; $('#bPin').onclick = pinTarget;
+  $('#tgClear').onclick = clearTarget; $('#bRoute').onclick = () => doRoute(false); $('#bWx').onclick = showWeather; $('#bShare').onclick = () => V2.moreSheet(); $('#bPin').onclick = () => S.target && V2.siteSheet(S.target, S.target.site);
+  $('#bCam').onclick = () => V2.takePhoto();
   $('#bLog').onclick = showLog; $('#bEnd').onclick = () => endNav(false);
   $('#roOdoBox').onclick = resetOdo;
   $('#sheetBack').onclick = closeSheet;

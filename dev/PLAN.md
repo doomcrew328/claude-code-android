@@ -3,15 +3,17 @@
 Last updated: 2026-11-19
 
 ## Status
-- **v1 live:** https://doomcrew328.github.io/claude-code-android/ (this `gh-pages` branch; GitHub Pages serves the repo root).
-- Tested in headless Chrome with real Alberta data (Swan Hills area): LSD/UWI search, official LSD outline, routing, turn-by-turn, offline reroute, offline reload via service worker, track record/save, tap-to-identify, weather sheet, offline area save. **Not yet field-tested on a real drive.**
-- v1 was built before a full competitor teardown. The teardown below was done afterwards; v2 should follow it.
+- **v2 live:** https://doomcrew328.github.io/claude-code-android/ (this `gh-pages` branch; GitHub Pages serves the repo root).
+- v1 (Nov 19): LSD grid, roads/cutlines, routing, nav, tracks, weather, SOS.
+- v2 (Nov 19, built after the competitor teardown): wells & licences, road-reach check, sites with gate codes/radio + crew links, trip planner (custom start + multi-stop), rig activity + follow, nearest hospital, town search, geo-stamped photos, sour-gas warnings.
+- **Automation:** a daily scheduled task (cloud) runs `dev/refresh.sh` and pushes updated `data/` (rigs, new licences; full well database when AER posts a new ST37). Mike doesn't need to do anything.
+- Tested in headless Chrome with real Alberta data (northern Alberta): all v1 + v2 flows, offline reload and offline reroute. **Not yet field-tested on a real drive.**
 
 ## What the app is for
-"The work order says 11-04-068-10W5 — get me there," including on lease roads and with no signal.
+"The work order says 16-25-045-12W5 — get me there," including on lease roads and with no signal.
 
 ## v1 features
-- Search: LSD, UWI (`100/11-04-068-10W5/00`), quarter (`NW 4-68-10 W5`), section, lat/long, DMS, saved pins.
+- Search: LSD, UWI (`100/16-25-045-12W5/00`), quarter (`NW 25-45-12 W5`), section, lat/long, DMS, saved pins.
 - Whole Alberta ATS grid on the phone (`data/lsd.bin.gz`, 252,578 sections, 2.3 MB). Reverse lookup (current LSD) works offline.
 - Accuracy vs official LSD polygons: median ~4 m, p95 ~7 m, worst found ~32 m. 3,094 irregular/fractional sections store official LSD centres (34,504).
 - Official LSD outline drawn when online.
@@ -48,16 +50,28 @@ CarPlay/Android Auto; bulk satellite downloads (imagery licence); reliable GPS w
 - AER spatial data page lists pipeline and abandoned-well shapefiles.
 - geospatial.alberta.ca: PSAP (911) boundaries, parks/protected areas, municipalities, Crown land reservations (CORS OK).
 
-## v2 candidate list (Mike to choose)
+## v2 list (built Nov 19 except where noted)
 1. Wells & facilities layer; search by licence/UWI/company; tap for details; downhole → surface. (OilTrails + PatchMap)
 2. Road-reach check before you drive: reaches / stops short / ends blind. (Lease Locator BACK40)
 3. Site notes: gate codes, radio channels, notes; shareable with crew. (Lease Locator)
-4. Daily rig activity + follow a rig. (Rig Finder)
+4. Daily rig activity + follow a rig (alert on app open when it moves). (Rig Finder)
 5. Directions from a chosen start (town/camp) + multi-stop trips. (OilTrails)
 6. Nearest hospital in the emergency screen. (PatchMap)
 7. Geo-stamped photos. (OilTrails)
-8. Pipelines + abandoned wells hazard layers. (StackDX)
-9. Nightly GitHub Action to refresh all data automatically.
+8. Abandoned wells: shown (grey) from ST37 status. Pipelines: NOT built — no CORS-enabled source; AER pipeline shapefile is too large to bundle.
+9. Automatic refresh: done with a daily scheduled cloud task instead of GitHub Actions (forks have Actions off by default).
+Extra beyond the list: sour-gas (H2S) warning from the AER category on every well/target; offline town/place search; bottom-hole laterals drawn on the map.
+
+## Data files (data/)
+| File | Source | Refresh |
+|---|---|---|
+| lsd.bin.gz | Alberta ATS v4.1 (OGL-Alberta) | static |
+| wells.bin.gz + wellnames.txt.gz | AER ST37 (excl. cancelled + reclaimed) | when AER posts new ST37 (monthly) |
+| wells_new.json | AER Well Licence List (daily) — licences newer than ST37 | daily |
+| rigs.json | AER ST49 daily drilling activity, last 30 days | daily |
+| places.json | Alberta Geographic Names (populated places) | static |
+| hospitals.json | StatCan ODHF 2020 + Grande Prairie Regional Hospital (helipad CGP4 coords) | static |
+| meta.json | refresh timestamps, ST37 Last-Modified | daily |
 
 ## Rebuilding the LSD database
 ```

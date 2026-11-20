@@ -24,7 +24,7 @@
 <header id="top">
   <form id="searchForm" class="glass cut" autocomplete="off">
     <svg class="ico" viewBox="0 0 24 24"><path d="M10.5 3a7.5 7.5 0 0 1 5.9 12.1l4.2 4.2-1.4 1.4-4.2-4.2A7.5 7.5 0 1 1 10.5 3zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"/></svg>
-    <input id="q" inputmode="text" spellcheck="false" autocapitalize="characters" placeholder="LSD · UWI · LAT,LON">
+    <input id="q" inputmode="text" spellcheck="false" autocapitalize="characters" placeholder="LSD · UWI · LICENCE · TOWN">
     <button type="submit" class="go">GO</button>
   </form>
   <div id="suggest" class="glass hidden"></div>
@@ -50,6 +50,7 @@
   <button class="rb" id="bFollow" title="Follow"><svg viewBox="0 0 24 24"><path d="M12 2l7 19-7-4-7 4z"/></svg><span>FREE</span></button>
   <button class="rb" id="bLayers" title="Layers"><svg viewBox="0 0 24 24"><path d="M12 3l10 5-10 5L2 8zm-7.6 8.3L12 15l7.6-3.7L22 12.5 12 17.5 2 12.5zm0 4.5L12 19.5l7.6-3.7L22 17 12 22 2 17z"/></svg><span>MAP</span></button>
   <button class="rb" id="bRec" title="Record track"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg><span>REC</span></button>
+  <button class="rb" id="bCam" title="Photo"><svg viewBox="0 0 24 24"><path d="M9 4h6l1.6 2H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.4zm3 4.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9zm0 2a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5z"/></svg><span>CAM</span></button>
   <button class="rb" id="bPacks" title="Offline"><svg viewBox="0 0 24 24"><path d="M11 3h2v10l3.5-3.5 1.4 1.4L12 16.8l-5.9-5.9 1.4-1.4L11 13zM4 19h16v2H4z"/></svg><span>SAVE</span></button>
   <button class="rb" id="bMenu" title="Menu"><svg viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg><span>MORE</span></button>
 </nav>
@@ -75,11 +76,12 @@
       <div class="tgtNums"><span id="tgDist">—</span><span id="tgBrg">—</span></div>
       <button class="x" id="tgClear" aria-label="Clear target">✕</button>
     </div>
+    <div id="tgInfo"></div>
     <div class="tgtBtns">
       <button class="act prime" id="bRoute">ROUTE</button>
       <button class="act" id="bWx">LEASE WX</button>
-      <button class="act" id="bShare">SHARE</button>
-      <button class="act" id="bPin">PIN</button>
+      <button class="act" id="bPin">SITE</button>
+      <button class="act" id="bShare">MORE</button>
     </div>
   </div>
   <div id="navBar" class="hidden">

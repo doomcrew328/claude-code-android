@@ -1,7 +1,8 @@
 // LEASELINE service worker — app shell + LSD database offline, imagery/terrain tiles kept as you view them.
-const VERSION = 'leaseline-v1';
+const VERSION = 'leaseline-v2';
 const SHELL = [
-  './', 'index.html', 'css/app.css', 'js/app.js', 'js/lsd.js', 'js/data.js', 'js/route.js',
+  './', 'index.html', 'css/app.css', 'js/app.js', 'js/lsd.js', 'js/data.js', 'js/route.js', 'js/wells.js', 'js/v2.js',
+  'data/places.json', 'data/hospitals.json',
   'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css', 'data/lsd.bin.gz', 'manifest.webmanifest',
   'vendor/fonts/b612-mono-latin-400-normal.woff2', 'vendor/fonts/b612-mono-latin-700-normal.woff2',
   'vendor/fonts/chakra-petch-latin-500-normal.woff2', 'vendor/fonts/chakra-petch-latin-700-normal.woff2',
@@ -29,6 +30,25 @@ self.addEventListener('fetch', (e) => {
       const hit = await c.match(e.request); if (hit) return hit;
       try { const r = await fetch(e.request); if (r.ok) { c.put(e.request, r.clone()); if (Math.random() < 0.02) trimTiles(); } return r; }
       catch { return new Response('', { status: 504 }); }
+    }));
+    return;
+  }
+  // daily data (rigs, new licences): network first so it's fresh, cached copy when offline
+  if (url.origin === location.origin && /\/data\/(rigs|wells_new|meta)\.json$/.test(url.pathname)) {
+    e.respondWith(caches.open(VERSION).then(async (c) => {
+      try { const r = await fetch(e.request, { cache: 'no-cache' }); if (r.ok) c.put(e.request, r.clone()); return r; }
+      catch { return (await c.match(e.request, { ignoreSearch: true })) || new Response('[]', { headers: { 'content-type': 'application/json' } }); }
+    }));
+    return;
+  }
+  // big data files (LSD grid, wells): cache-first, re-check at most once a week
+  if (url.origin === location.origin && /\.gz$/.test(url.pathname)) {
+    e.respondWith(caches.open(VERSION).then(async (c) => {
+      const hit = await c.match(e.request, { ignoreSearch: true });
+      const age = hit ? Date.now() - new Date(hit.headers.get('date') || 0).getTime() : Infinity;
+      if (hit && age < 7 * 864e5) return hit;
+      const net = fetch(e.request).then(r => { if (r.ok) c.put(e.request, r.clone()); return r; }).catch(() => hit);
+      return hit || net;
     }));
     return;
   }

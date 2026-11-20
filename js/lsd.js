@@ -212,7 +212,7 @@ export function parseQuery(raw) {
     const lat = +dms[1] + dms[2] / 60 + dms[3] / 3600, lon = -(+dms[4] + dms[5] / 60 + dms[6] / 3600);
     return { kind: 'LL', lat, lon };
   }
-  // UWI: 100/11-04-068-10W5/00  -> strip location exception + event sequence
+  // UWI: 100/16-25-045-12W5/00  -> strip location exception + event sequence
   q = q.replace(/^\s*1?\d{2}\s*\/\s*/, '').replace(/\s*\/\s*\d{1,2}\s*$/, '');
   q = q.replace(/\bLSD\b|\bSEC(TION)?\b|\bTWP\b|\bTOWNSHIP\b|\bRGE\b|\bRANGE\b|\bMER(IDIAN)?\b/g, ' ');
   // meridian written as W4/W5/W6 (not the W of a NW/SW quarter)
@@ -224,13 +224,13 @@ export function parseQuery(raw) {
   let nums = (body.replace(/\b(NE|NW|SE|SW)\b/, ' ').match(/\d+/g) || []).map(Number);
   let guessedMer = false;
   if (!m && nums.length >= 4 && nums[nums.length - 1] >= 4 && nums[nums.length - 1] <= 6) {
-    m = nums.pop(); guessedMer = true; // e.g. 11-04-068-10-5
+    m = nums.pop(); guessedMer = true; // e.g. 16-25-045-12-5
   }
   if (!m) return nums.length >= 3 ? { error: 'Add the meridian, e.g. W5' } : null;
   let d;
   if (nums.length >= 4) d = { ls: nums[0], s: nums[1], t: nums[2], r: nums[3], m };
   else if (nums.length === 3) d = { s: nums[0], t: nums[1], r: nums[2], m, qs: qsM ? qsM[1] : undefined };
-  else return { error: 'Need LSD-SEC-TWP-RGE W#, e.g. 11-04-068-10 W5' };
+  else return { error: 'Need LSD-SEC-TWP-RGE W#, e.g. 16-25-045-12 W5' };
   const bad = (d.ls !== undefined && (d.ls < 1 || d.ls > 16)) ? 'LSD must be 1–16'
     : (d.s < 1 || d.s > 36) ? 'Section must be 1–36'
     : (d.t < 1 || d.t > 126) ? 'Township must be 1–126'

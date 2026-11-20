@@ -27,6 +27,7 @@ export const ROAD_TYPES = {
   10: { name: 'driveway / lease access', kmh: 15 },
   12: { name: 'winter road', kmh: 25 },
   14: { name: 'dry-weather road', kmh: 25 },
+  98: { name: 'off-road leg to the mapped road', kmh: 10 },
   99: { name: 'your recorded track', kmh: 20 },
 };
 const MAX_KMH = 105;
@@ -163,8 +164,15 @@ export function route(g, from, to) {
   for (let v = T; v !== -1; v = prev[v]) { path.push(px(v)); if (prevE[v]) segs.push(prevE[v]); }
   path.reverse(); segs.reverse();
   const nodesSeq = []; for (let v = T; v !== -1; v = prev[v]) nodesSeq.push(v); nodesSeq.reverse();
+  let seconds = gS[T];
+  // you're off the mapped road (lease pad, yard, bush): include the short leg to the road so it isn't "off route"
+  if (s.d > 15) {
+    path.unshift([from[0], from[1]]); nodesSeq.unshift(-1);
+    segs.unshift({ to: S, d: s.d, w: s.d / (10 / 3.6), ft: 98, name: 'to mapped road' });
+    seconds += s.d / (10 / 3.6);
+  }
   const meters = segs.reduce((a, e) => a + e.d, 0);
-  return { path, segs, nodes: nodesSeq, meters, seconds: gS[T], snapStart: s, snapEnd: t, steps: buildSteps(g, path, segs, nodesSeq, n), lastMile: dist(t.pt, to) };
+  return { path, segs, nodes: nodesSeq, meters, seconds, snapStart: s, snapEnd: t, steps: buildSteps(g, path, segs, nodesSeq, n), lastMile: dist(t.pt, to) };
 }
 
 // ---- turn instructions with odometer km (how lease directions are written) ----
@@ -184,11 +192,14 @@ function pointAlong(path, i, dir, meters) {
 function buildSteps(g, path, segs, nodes, n) {
   const steps = []; let km = 0;
   const label = (e) => (e.name ? e.name + ' · ' : '') + (ROAD_TYPES[e.ft] || ROAD_TYPES[4]).name;
-  steps.push({ km: 0, at: path[0], icon: 'start', text: `Head ${compass(bearing(path[0], pointAlong(path, 0, 1, 40)))} on ${label(segs[0] || { ft: 4 })}` });
+  const first = segs[0] || { ft: 4 };
+  steps.push({ km: 0, at: path[0], icon: 'start', text: first.ft === 98
+    ? `Head ${compass(bearing(path[0], path[1]))} ${Math.round(first.d)} m to the mapped road`
+    : `Head ${compass(bearing(path[0], pointAlong(path, 0, 1, 40)))} on ${label(first)}` });
   for (let i = 1; i < path.length - 1; i++) {
     km += segs[i - 1].d / 1000;
     const v = nodes[i];
-    const deg = v < n ? g.adj[v].length : 2;
+    const deg = v >= 0 && v < n ? g.adj[v].length : 2;
     const ein = segs[i - 1], eout = segs[i];
     const bin = bearing(pointAlong(path, i, -1, 25), path[i]);
     const bout = bearing(path[i], pointAlong(path, i, 1, 25));
@@ -207,9 +218,10 @@ export function compass(b) { return ['north', 'northeast', 'east', 'southeast', 
 export function compassShort(b) { return ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(b / 45) % 8]; }
 
 // Progress along a route polyline: distance travelled + distance off the line
-export function progressOn(path, cum, p) {
+export function progressOn(path, cum, p, minAlong = -Infinity, maxAlong = Infinity) {
   let best = { off: Infinity, along: 0, i: 0 };
   for (let i = 0; i < path.length - 1; i++) {
+    if (cum[i + 1] < minAlong || cum[i] > maxAlong) continue; // only look near where we already are
     const q = projectOnSeg(p, path[i], path[i + 1]);
     const d = dist(p, q.pt);
     if (d < best.off) best = { off: d, along: cum[i] + q.t * (cum[i + 1] - cum[i]), i };
